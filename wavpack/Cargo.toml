@@ -1,0 +1,20 @@
+[package]
+name = "wavpack"
+version = "0.1.0"
+edition = "2018"
+authors = ["Toru3 <ryuutet@gmail.com>"]
+description = "API binding of [WavPack](https://www.wavpack.com/) >= 5.1.0"
+license = "BSD-3-Clause"
+documentation = "https://docs.rs/wavpack/"
+repository = "https://gitlab.com/Toru3/wavpack-rs"
+readme = "README.md"
+keywords = ["WavPack", "audio", "encode", "decode"]
+categories = ["api-bindings", "multimedia::audio", "multimedia::encoding"]
+
+[dependencies]
+libc = "0.2.101"
+thiserror = "1.0.29"
+wavpack-sys = "0.1.0"
+
+[dev-dependencies]
+anyhow = "1.0.43"
