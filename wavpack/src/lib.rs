@@ -474,14 +474,16 @@ impl Drop for Context {
     }
 }
 
-#[derive(Debug)]
 struct WriteId {
-    file: std::fs::File,
+    writeable: Box<dyn Write>,
     error: Option<std::io::Error>,
 }
 impl WriteId {
-    fn new(file: File) -> Self {
-        Self { file, error: None }
+    fn new(writeable: impl Write + 'static) -> Self {
+        Self {
+            writeable: Box::new(writeable),
+            error: None,
+        }
     }
 }
 unsafe extern "C" fn block_output(id: *mut c_void, data: *mut c_void, bcount: i32) -> c_int {
@@ -500,7 +502,7 @@ unsafe extern "C" fn block_output(id: *mut c_void, data: *mut c_void, bcount: i3
         return FALSE;
     }
     let data = std::slice::from_raw_parts_mut(data as *mut u8, bcount as usize);
-    match id.file.write_all(data) {
+    match id.writeable.write_all(data) {
         Ok(_) => TRUE,
         Err(x) => {
             id.error = Some(x);
@@ -605,7 +607,6 @@ impl Config {
     }
 }
 
-#[derive(Debug)]
 pub struct WriteBuilder<'a> {
     wv: WriteId,
     wvc: Option<WriteId>,
