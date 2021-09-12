@@ -1,1 +1,1 @@
-#include <wavpack/wavpack.h>
+#include <wavpack.h>
