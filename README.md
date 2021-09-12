@@ -1,3 +1,3 @@
-API binding of [WavPack](https://www.wavpack.com/) >= "5.1.0"
+API binding of [WavPack](https://www.wavpack.com/)
 
 See [wavpack/README.md](wavpack/README.md).
