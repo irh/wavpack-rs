@@ -1,10 +1,10 @@
-API binding of [WavPack](https://www.wavpack.com/) >= "5.1.0"
+API binding of [WavPack](https://www.wavpack.com/)
 
 # Requirement
-* WavPack >= 5.1.0
+* CMake
 * Clang
 
 On Debian or Ubuntu, you can install by
 ```shell-session
-# apt install libwavpack-dev llvm-dev libclang-dev clang
+# apt install cmake llvm-dev libclang-dev clang
 ```
