@@ -1,6 +1,6 @@
 [package]
 name = "wavpack-sys"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2018"
 authors = ["Toru3 <ryuutet@gmail.com>"]
 description = "C FFI binding of [WavPack](https://www.wavpack.com/)"
