@@ -12,9 +12,8 @@ keywords = ["WavPack", "audio", "encode", "decode"]
 categories = ["api-bindings", "multimedia::audio", "multimedia::encoding"]
 
 [dependencies]
-libc = "0.2.101"
 thiserror = "1.0.29"
-wavpack-sys = "0.1.0"
+ffi = { package = "wavpack-sys", version = "0.1.0", path = "../wavpack-sys" }
 
 [dev-dependencies]
 anyhow = "1.0.43"

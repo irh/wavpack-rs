@@ -1,13 +1,15 @@
 #![doc = include_str!("../README.md")]
-use std::collections::BTreeMap;
-use std::ffi::{CStr, CString};
-use std::fs::File;
-use std::io::Write;
-use std::os::raw::{c_char, c_int, c_void};
-use std::path::Path;
-use std::ptr::NonNull;
+use ffi::*;
+use std::{
+    collections::BTreeMap,
+    ffi::{CStr, CString},
+    fs::File,
+    io::Write,
+    os::raw::{c_char, c_int, c_void},
+    path::Path,
+    ptr::NonNull,
+};
 use thiserror::Error;
-use wavpack_sys::*;
 
 /// Error type
 #[derive(Error, Debug)]
