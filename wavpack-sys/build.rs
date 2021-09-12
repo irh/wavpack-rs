@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 fn main() {
     let dst = cmake::build("WavPack");
-    println!("cargo:rustc-link-search=native={}", dst.display());
+    println!("cargo:rustc-link-search=native={}/lib", dst.display());
     println!("cargo:rustc-link-lib=wavpack");
     println!("cargo:rerun-if-changed=wrapper.h");
     let bindings = bindgen::Builder::default()
