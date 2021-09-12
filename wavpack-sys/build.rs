@@ -5,8 +5,11 @@ fn main() {
     let dst = cmake::build("WavPack");
     println!("cargo:rustc-link-search=native={}", dst.display());
     println!("cargo:rustc-link-lib=wavpack");
+    println!("cargo:rerun-if-changed=wrapper.h");
     let bindings = bindgen::Builder::default()
         .header("wrapper.h")
+        .clang_arg(format!("-I{}/include", dst.display()))
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks))
         .generate()
         .expect("Unable to genarate bindings");
     let out_path = env::var("OUT_DIR").unwrap();
