@@ -2,6 +2,8 @@
 # Official language image. Look for the different tagged releases at:
 # https://hub.docker.com/r/library/rust/tags/
 image: "rust:latest"
+variables:
+  GIT_SUBMODULE_STRATEGY: recursive
 
 .run_test: &run_test
   script:
@@ -16,12 +18,12 @@ test:stable:
   <<: *run_test
   before_script:
     - apt-get update
-    - apt-get install -y --no-install-recommends libwavpack-dev llvm-dev libclang-dev clang
+    - apt-get install -y --no-install-recommends cmake llvm-dev libclang-dev clang
 
 test:beta:
   <<: *run_test
   before_script:
     - apt-get update
-    - apt-get install -y --no-install-recommends libwavpack-dev llvm-dev libclang-dev clang
+    - apt-get install -y --no-install-recommends cmake llvm-dev libclang-dev clang
     - rustup default beta
 
