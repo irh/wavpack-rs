@@ -70,7 +70,7 @@ fn option_to_ptr<T>(x: &mut Option<T>) -> *mut T {
 /// ```
 /// use wavpack::get_library_version;
 /// let version = get_library_version();
-/// println!("{:x}", version); // If version is 5.1.0, this prints `50100`.
+/// assert_eq!(version, 0x050400);
 /// ```
 pub fn get_library_version() -> u32 {
     unsafe { WavpackGetLibraryVersion() }
@@ -81,7 +81,7 @@ pub fn get_library_version() -> u32 {
 /// ```
 /// use wavpack::get_library_version_string;
 /// let version = get_library_version_string();
-/// println!("{}", version); // If version is 5.1.0, this prints `5.1.0`.
+/// assert_eq!(version, "5.4.0");
 /// ```
 pub fn get_library_version_string() -> &'static str {
     let c_str = unsafe { CStr::from_ptr(WavpackGetLibraryVersionString()) };
