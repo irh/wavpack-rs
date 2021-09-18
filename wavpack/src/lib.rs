@@ -3,7 +3,6 @@ use ffi::*;
 use std::{
     collections::BTreeMap,
     ffi::{CStr, CString},
-    fs::File,
     io::Write,
     os::raw::{c_char, c_int, c_void},
     path::Path,
@@ -631,9 +630,9 @@ macro_rules! add_config_opt {
     };
 }
 impl<'a> WriteBuilder<'a> {
-    pub fn new(file: File) -> Self {
+    pub fn new(writeable: impl Write + 'static) -> Self {
         Self {
-            wv: WriteId::new(file),
+            wv: WriteId::new(writeable),
             wvc: None,
             file_info: None,
             wrap_header: None,
@@ -682,8 +681,8 @@ impl<'a> WriteBuilder<'a> {
         };
         Ok(context)
     }
-    pub fn add_wvc(mut self, file: File) -> Self {
-        self.wvc = Some(WriteId::new(file));
+    pub fn add_wvc(mut self, writeable: impl Write + 'static) -> Self {
+        self.wvc = Some(WriteId::new(writeable));
         self
     }
     add_opt!(add_file_info, file_info, FileInfomation);

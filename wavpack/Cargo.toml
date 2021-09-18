@@ -1,6 +1,6 @@
 [package]
 name = "wavpack"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2018"
 authors = ["Toru3 <ryuutet@gmail.com>"]
 description = "API binding of WavPack"
