@@ -103,6 +103,7 @@ pub struct ContextBuilder<'a> {
 }
 macro_rules! add_flag {
     ($fn_name:ident, $flag:ident) => {
+        #[must_use]
         pub fn $fn_name(mut self) -> Self {
             self.flag |= $flag;
             self
@@ -128,6 +129,7 @@ impl<'a> ContextBuilder<'a> {
     add_flag!(tags, OPEN_TAGS);
     add_flag!(wrapper, OPEN_WRAPPER);
     add_flag!(open_2ch_max, OPEN_2CH_MAX);
+    #[must_use]
     pub fn normalize(mut self, norm_offset: i32) -> Self {
         self.flag |= OPEN_NORMALIZE;
         self.norm_offset = Some(norm_offset);
@@ -615,6 +617,7 @@ pub struct WriteBuilder<'a> {
 }
 macro_rules! add_opt {
     ($fn_name:ident, $param:ident, $param_t:ty) => {
+        #[must_use]
         pub fn $fn_name(mut self, $param: $param_t) -> Self {
             self.$param = Some($param);
             self
@@ -623,6 +626,7 @@ macro_rules! add_opt {
 }
 macro_rules! add_config_opt {
     ($fn_name:ident, $param:ident, $param_t:ty) => {
+        #[must_use]
         pub fn $fn_name(mut self, $param: $param_t) -> Self {
             self.config.$param = Some($param);
             self
@@ -681,6 +685,7 @@ impl<'a> WriteBuilder<'a> {
         };
         Ok(context)
     }
+    #[must_use]
     pub fn add_wvc(mut self, writeable: impl Write + 'static) -> Self {
         self.wvc = Some(WriteId::new(writeable));
         self
