@@ -353,7 +353,7 @@ impl std::fmt::Debug for TagData {
                 let len = data.len();
                 f.debug_tuple("Binary")
                     .field(&name)
-                    .field(&format!("{}-byte binary item", len))
+                    .field(&format!("{len}-byte binary item"))
                     .finish()
             }
         }
