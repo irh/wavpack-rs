@@ -14,5 +14,5 @@ categories = ["external-ffi-bindings", "multimedia::audio", "multimedia::encodin
 [dependencies]
 
 [build-dependencies]
-bindgen = "0.59.1"
+bindgen = "0.68.1"
 cmake = "0.1.45"
