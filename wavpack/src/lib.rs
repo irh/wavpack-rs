@@ -254,8 +254,8 @@ impl Context {
     //);
     def_fn!(get_sample_rate, WavpackGetSampleRate, u32);
     def_fn!(get_native_sample_rate, WavpackGetNativeSampleRate, u32);
-    def_fn!(get_bits_par_sample, WavpackGetBitsPerSample, i32);
-    def_fn!(get_bytes_par_sample, WavpackGetBytesPerSample, i32);
+    def_fn!(get_bits_per_sample, WavpackGetBitsPerSample, i32);
+    def_fn!(get_bytes_per_sample, WavpackGetBytesPerSample, i32);
     def_fn!(get_version, WavpackGetVersion, i32);
     def_fn!(get_file_format, WavpackGetFileFormat, u8);
     pub fn get_file_extension(&mut self) -> Result<String> {
