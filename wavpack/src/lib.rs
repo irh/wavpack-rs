@@ -293,7 +293,7 @@ impl Context {
     ///
     /// Requires: `buffer.len() <= u32::MAX`
     pub fn unpack_samples(&mut self, buffer: &mut [i32]) -> Result<u32> {
-        let len = buffer.len();
+        let len = buffer.len() / self.get_num_channels()? as usize;
         if usize::BITS >= u32::BITS && len > u32::MAX as usize {
             return Err(Error::IllegalArgument("buffer"));
         }
@@ -680,7 +680,7 @@ impl<'a> WriteBuilder<'a> {
             context: NonNull::new(wpc).unwrap(),
             _wv: self.wv,
             _wvc: self.wvc,
-            _config: config,
+            config,
             is_flushed: true,
         };
         Ok(context)
@@ -713,7 +713,7 @@ pub struct WriteContext {
     context: NonNull<WavpackContext>,
     _wv: Box<WriteId>,
     _wvc: Option<Box<WriteId>>,
-    _config: WavpackConfig,
+    config: WavpackConfig,
     is_flushed: bool,
 }
 impl WriteContext {
@@ -721,7 +721,7 @@ impl WriteContext {
     ///
     /// Requires: `buffer.len() <= u32::MAX`
     pub fn pack_samples(&mut self, samples: &mut [i32]) -> Result<()> {
-        let len = samples.len();
+        let len = samples.len() / self.config.num_channels as usize;
         if usize::BITS >= u32::BITS && len > u32::MAX as usize {
             return Err(Error::IllegalArgument("samples"));
         }
