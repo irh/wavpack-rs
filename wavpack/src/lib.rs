@@ -609,8 +609,8 @@ impl Config {
 }
 
 pub struct WriteBuilder<'a> {
-    wv: WriteId,
-    wvc: Option<WriteId>,
+    wv: Box<WriteId>,
+    wvc: Option<Box<WriteId>>,
     file_info: Option<FileInfomation>,
     wrap_header: Option<&'a mut [u8]>,
     config: Config,
@@ -636,7 +636,7 @@ macro_rules! add_config_opt {
 impl<'a> WriteBuilder<'a> {
     pub fn new(writeable: impl Write + 'static) -> Self {
         Self {
-            wv: WriteId::new(writeable),
+            wv: Box::new(WriteId::new(writeable)),
             wvc: None,
             file_info: None,
             wrap_header: None,
@@ -653,7 +653,7 @@ impl<'a> WriteBuilder<'a> {
     }
     pub fn build(mut self, total_samples: i64) -> Result<WriteContext> {
         self.config.validate()?;
-        let wv_ptr = (&mut self.wv as *mut WriteId) as *mut c_void;
+        let wv_ptr = &mut *self.wv as *mut WriteId as *mut c_void;
         let wvc_ptr = option_to_ptr(&mut self.wvc) as *mut _;
         let wpc = unsafe { WavpackOpenFileOutput(Some(block_output), wv_ptr, wvc_ptr) };
         if wpc.is_null() {
@@ -687,7 +687,7 @@ impl<'a> WriteBuilder<'a> {
     }
     #[must_use]
     pub fn add_wvc(mut self, writeable: impl Write + 'static) -> Self {
-        self.wvc = Some(WriteId::new(writeable));
+        self.wvc = Some(Box::new(WriteId::new(writeable)));
         self
     }
     add_opt!(add_file_info, file_info, FileInfomation);
@@ -711,8 +711,8 @@ impl<'a> WriteBuilder<'a> {
 
 pub struct WriteContext {
     context: NonNull<WavpackContext>,
-    _wv: WriteId,
-    _wvc: Option<WriteId>,
+    _wv: Box<WriteId>,
+    _wvc: Option<Box<WriteId>>,
     _config: WavpackConfig,
     is_flushed: bool,
 }
