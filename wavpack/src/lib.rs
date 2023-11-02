@@ -66,22 +66,22 @@ fn option_to_ptr<T>(x: &mut Option<T>) -> *mut T {
 /// Return the WavPack library version in a packed integer.
 ///
 /// Bits 0-7 give the micro version, bits 8-15 give the minor version, and
-/// bits 16-23 give the major version. As of this writing the version is 5.0.0.
+/// bits 16-23 give the major version. As of this writing the version is 5.6.0.
 /// ```
 /// use wavpack::get_library_version;
 /// let version = get_library_version();
-/// assert_eq!(version, 0x050400);
+/// assert_eq!(version, 0x050600);
 /// ```
 pub fn get_library_version() -> u32 {
     unsafe { WavpackGetLibraryVersion() }
 }
 /// Return the WavPack library version as a string.
 ///
-/// As of this writing this is "5.0.0".
+/// As of this writing this is "5.6.0".
 /// ```
 /// use wavpack::get_library_version_string;
 /// let version = get_library_version_string();
-/// assert_eq!(version, "5.4.0");
+/// assert_eq!(version, "5.6.0");
 /// ```
 pub fn get_library_version_string() -> &'static str {
     let c_str = unsafe { CStr::from_ptr(WavpackGetLibraryVersionString()) };
@@ -254,8 +254,8 @@ impl Context {
     //);
     def_fn!(get_sample_rate, WavpackGetSampleRate, u32);
     def_fn!(get_native_sample_rate, WavpackGetNativeSampleRate, u32);
-    def_fn!(get_bits_par_sample, WavpackGetBitsPerSample, i32);
-    def_fn!(get_bytes_par_sample, WavpackGetBytesPerSample, i32);
+    def_fn!(get_bits_per_sample, WavpackGetBitsPerSample, i32);
+    def_fn!(get_bytes_per_sample, WavpackGetBytesPerSample, i32);
     def_fn!(get_version, WavpackGetVersion, i32);
     def_fn!(get_file_format, WavpackGetFileFormat, u8);
     pub fn get_file_extension(&mut self) -> Result<String> {
@@ -293,7 +293,7 @@ impl Context {
     ///
     /// Requires: `buffer.len() <= u32::MAX`
     pub fn unpack_samples(&mut self, buffer: &mut [i32]) -> Result<u32> {
-        let len = buffer.len();
+        let len = buffer.len() / self.get_num_channels()? as usize;
         if usize::BITS >= u32::BITS && len > u32::MAX as usize {
             return Err(Error::IllegalArgument("buffer"));
         }
@@ -609,8 +609,8 @@ impl Config {
 }
 
 pub struct WriteBuilder<'a> {
-    wv: WriteId,
-    wvc: Option<WriteId>,
+    wv: Box<WriteId>,
+    wvc: Option<Box<WriteId>>,
     file_info: Option<FileInfomation>,
     wrap_header: Option<&'a mut [u8]>,
     config: Config,
@@ -636,7 +636,7 @@ macro_rules! add_config_opt {
 impl<'a> WriteBuilder<'a> {
     pub fn new(writeable: impl Write + 'static) -> Self {
         Self {
-            wv: WriteId::new(writeable),
+            wv: Box::new(WriteId::new(writeable)),
             wvc: None,
             file_info: None,
             wrap_header: None,
@@ -653,7 +653,7 @@ impl<'a> WriteBuilder<'a> {
     }
     pub fn build(mut self, total_samples: i64) -> Result<WriteContext> {
         self.config.validate()?;
-        let wv_ptr = (&mut self.wv as *mut WriteId) as *mut c_void;
+        let wv_ptr = &mut *self.wv as *mut WriteId as *mut c_void;
         let wvc_ptr = option_to_ptr(&mut self.wvc) as *mut _;
         let wpc = unsafe { WavpackOpenFileOutput(Some(block_output), wv_ptr, wvc_ptr) };
         if wpc.is_null() {
@@ -680,14 +680,14 @@ impl<'a> WriteBuilder<'a> {
             context: NonNull::new(wpc).unwrap(),
             _wv: self.wv,
             _wvc: self.wvc,
-            _config: config,
+            config,
             is_flushed: true,
         };
         Ok(context)
     }
     #[must_use]
     pub fn add_wvc(mut self, writeable: impl Write + 'static) -> Self {
-        self.wvc = Some(WriteId::new(writeable));
+        self.wvc = Some(Box::new(WriteId::new(writeable)));
         self
     }
     add_opt!(add_file_info, file_info, FileInfomation);
@@ -711,9 +711,9 @@ impl<'a> WriteBuilder<'a> {
 
 pub struct WriteContext {
     context: NonNull<WavpackContext>,
-    _wv: WriteId,
-    _wvc: Option<WriteId>,
-    _config: WavpackConfig,
+    _wv: Box<WriteId>,
+    _wvc: Option<Box<WriteId>>,
+    config: WavpackConfig,
     is_flushed: bool,
 }
 impl WriteContext {
@@ -721,7 +721,7 @@ impl WriteContext {
     ///
     /// Requires: `buffer.len() <= u32::MAX`
     pub fn pack_samples(&mut self, samples: &mut [i32]) -> Result<()> {
-        let len = samples.len();
+        let len = samples.len() / self.config.num_channels as usize;
         if usize::BITS >= u32::BITS && len > u32::MAX as usize {
             return Err(Error::IllegalArgument("samples"));
         }

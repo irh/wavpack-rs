@@ -11,7 +11,7 @@ fn main() {
         .clang_arg(format!("-I{}/include", dst.display()))
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
         .generate()
-        .expect("Unable to genarate bindings");
+        .expect("Unable to generate bindings");
     let out_path = env::var("OUT_DIR").unwrap();
     let out_path = PathBuf::from(out_path);
     bindings
