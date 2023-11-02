@@ -1,4 +1,4 @@
-C FFI binding of [WavPack](https://www.wavpack.com/) 5.4.0
+C FFI binding of [WavPack](https://www.wavpack.com/) 5.6.0
 
 # Requirement
 * CMake
