@@ -1,10 +1,10 @@
 use crate::{Error, Result};
-use ffi::*;
 use std::{
     ffi::{c_char, c_int, c_void},
     io::Write,
     ptr::NonNull,
 };
+use wavpack_sys::*;
 
 fn option_to_ptr<T>(x: &mut Option<T>) -> *mut T {
     match x {

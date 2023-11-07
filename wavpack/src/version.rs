@@ -1,5 +1,5 @@
-use ffi::*;
 use std::ffi::CStr;
+use wavpack_sys::*;
 
 /// Return the WavPack library version in a packed integer.
 ///

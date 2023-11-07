@@ -1,11 +1,11 @@
 use crate::{Error, Result};
-use ffi::*;
 use std::{
     collections::BTreeMap,
     ffi::{c_char, CStr, CString},
     path::Path,
     ptr::NonNull,
 };
+use wavpack_sys::*;
 
 fn char_ptr_to_cstring(src: *const c_char) -> Result<CString> {
     if src.is_null() {
