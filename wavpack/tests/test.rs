@@ -17,7 +17,7 @@ fn make_wave(frames: usize, channels: usize, frequency: f64) -> Vec<i32> {
 }
 
 fn seq(channels: usize) -> Vec<i32> {
-    vec![
+    [
         make_wave(44100, channels, 277.183),
         make_wave(44100, channels, 293.665),
         make_wave(44100, channels, 329.628),
@@ -29,7 +29,7 @@ fn seq(channels: usize) -> Vec<i32> {
     ]
     .into_iter()
     .flatten()
-    .collect::<Vec<_>>()
+    .collect()
 }
 
 fn run_write_read_test(channels: usize, channel_mask: i32, file_name: &str) {
