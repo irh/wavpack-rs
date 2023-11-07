@@ -7,15 +7,16 @@ use std::{
     ptr::NonNull,
 };
 
-unsafe fn char_ptr_to_cstring(src: *const c_char) -> Result<CString> {
+fn char_ptr_to_cstring(src: *const c_char) -> Result<CString> {
     if src.is_null() {
         Err(Error::NullPointer)
     } else {
-        Ok(CStr::from_ptr(src).to_owned())
+        let cstr = unsafe { CStr::from_ptr(src) };
+        Ok(cstr.to_owned())
     }
 }
 
-unsafe fn char_ptr_to_string(src: *const c_char) -> Result<String> {
+fn char_ptr_to_string(src: *const c_char) -> Result<String> {
     Ok(char_ptr_to_cstring(src)?.into_string()?)
 }
 
@@ -149,7 +150,7 @@ impl Context {
         if error_message.is_null() {
             return Ok(());
         }
-        let error_message = unsafe { char_ptr_to_string(error_message) }?;
+        let error_message = char_ptr_to_string(error_message)?;
         if error_message.is_empty() {
             Ok(())
         } else {
@@ -168,7 +169,7 @@ impl Context {
         let context = unsafe { WavpackOpenFileInput(file_name, error_ptr, flag, norm_offset) };
         match NonNull::new(context) {
             None => {
-                let error = unsafe { char_ptr_to_string(error_ptr) }?;
+                let error = char_ptr_to_string(error_ptr)?;
                 Err(Error::Message(error))
             }
             Some(context) => Ok(Self { context }),
@@ -204,7 +205,7 @@ impl Context {
         let wpc = self.context.as_ptr();
         let r = unsafe { WavpackGetFileExtension(wpc) };
         self.get_error_message()?;
-        let r = unsafe { char_ptr_to_string(r) }?;
+        let r = char_ptr_to_string(r)?;
         Ok(r)
     }
     def_fn!(get_qualify_mode, WavpackGetQualifyMode, i32);
@@ -320,7 +321,7 @@ where
     let buf_ptr = buf.as_mut_ptr();
     let n_len = func(buf_ptr, size)?;
     assert_eq!(len, n_len);
-    unsafe { char_ptr_to_cstring(buf_ptr) }
+    char_ptr_to_cstring(buf_ptr)
 }
 
 fn check_and_get_binary<F>(mut func: F) -> Result<Vec<u8>>
@@ -381,7 +382,7 @@ impl Context {
         };
         let mut v = check_and_get_binary(func)?;
         let v_ptr = v.as_mut_ptr() as *mut i8;
-        let name = unsafe { char_ptr_to_cstring(v_ptr) }?;
+        let name = char_ptr_to_cstring(v_ptr)?;
         let name_len = name.to_bytes_with_nul().len();
         Ok((name, v[name_len..].to_vec()))
     }
