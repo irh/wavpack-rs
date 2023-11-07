@@ -6,13 +6,6 @@ use std::{
 };
 use wavpack_sys::*;
 
-fn option_to_ptr<T>(x: &mut Option<T>) -> *mut T {
-    match x {
-        Some(x) => x as *mut _,
-        None => std::ptr::null::<T>() as *mut _,
-    }
-}
-
 struct WriteId {
     writeable: Box<dyn Write>,
     error: Option<std::io::Error>,
@@ -201,8 +194,13 @@ impl<'a> WriteBuilder<'a> {
 
     pub fn build(mut self, total_samples: i64) -> Result<WriteContext> {
         self.config.validate()?;
+
         let wv_ptr = &mut *self.wv as *mut WriteId as *mut c_void;
-        let wvc_ptr = option_to_ptr(&mut self.wvc) as *mut _;
+        let wvc_ptr = match &mut self.wvc {
+            Some(x) => &mut **x as *mut WriteId,
+            None => std::ptr::null::<WriteId>(),
+        } as *mut c_void;
+
         let wpc = unsafe { WavpackOpenFileOutput(Some(block_output), wv_ptr, wvc_ptr) };
         if wpc.is_null() {
             return Err(Error::OpenFileOutputFailed);
