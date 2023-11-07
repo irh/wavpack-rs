@@ -56,21 +56,21 @@ unsafe extern "C" fn block_output(id: *mut c_void, data: *mut c_void, bcount: i3
 #[derive(Clone, Copy, Debug)]
 #[non_exhaustive]
 pub enum FileFormat {
-    WAV,
+    Wav,
     W64,
-    CAF,
-    DFF,
-    DSF,
+    Caf,
+    Dff,
+    Dsf,
 }
 
 impl FileFormat {
     fn to_u8(self) -> u8 {
         match self {
-            Self::WAV => WP_FORMAT_WAV as u8,
+            Self::Wav => WP_FORMAT_WAV as u8,
             Self::W64 => WP_FORMAT_W64 as u8,
-            Self::CAF => WP_FORMAT_CAF as u8,
-            Self::DFF => WP_FORMAT_DFF as u8,
-            Self::DSF => WP_FORMAT_DSF as u8,
+            Self::Caf => WP_FORMAT_CAF as u8,
+            Self::Dff => WP_FORMAT_DFF as u8,
+            Self::Dsf => WP_FORMAT_DSF as u8,
         }
     }
 }
