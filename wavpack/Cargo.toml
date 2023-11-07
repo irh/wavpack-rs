@@ -7,7 +7,7 @@ description = "API binding of WavPack"
 license = "BSD-3-Clause"
 documentation = "https://docs.rs/wavpack/"
 repository = "https://gitlab.com/Toru3/wavpack-rs"
-readme = "README.md"
+readme = "../README.md"
 keywords = ["WavPack", "audio", "encode", "decode"]
 categories = ["api-bindings", "multimedia::audio", "multimedia::encoding"]
 
