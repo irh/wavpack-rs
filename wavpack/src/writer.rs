@@ -144,7 +144,7 @@ impl Config {
     }
 }
 
-pub struct WriteBuilder<'a> {
+pub struct WavPackWriterBuilder<'a> {
     wv: Box<WriteId>,
     wvc: Option<Box<WriteId>>,
     file_info: Option<FileInfomation>,
@@ -172,7 +172,7 @@ macro_rules! add_config_opt {
     };
 }
 
-impl<'a> WriteBuilder<'a> {
+impl<'a> WavPackWriterBuilder<'a> {
     pub fn new(writeable: impl Write + 'static) -> Self {
         Self {
             wv: Box::new(WriteId::new(writeable)),
@@ -192,7 +192,7 @@ impl<'a> WriteBuilder<'a> {
         }
     }
 
-    pub fn build(mut self, total_samples: i64) -> Result<WriteContext> {
+    pub fn build(mut self, total_samples: i64) -> Result<WavPackWriter> {
         self.config.validate()?;
 
         let wv_ptr = &mut *self.wv as *mut WriteId as *mut c_void;
@@ -222,7 +222,7 @@ impl<'a> WriteBuilder<'a> {
             WavpackSetConfiguration64(wpc, config_ptr, total_samples, std::ptr::null());
             WavpackPackInit(wpc);
         }
-        let context = WriteContext {
+        let context = WavPackWriter {
             context: NonNull::new(wpc).unwrap(),
             _wv: self.wv,
             _wvc: self.wvc,
@@ -257,7 +257,7 @@ impl<'a> WriteBuilder<'a> {
     add_config_opt!(add_md5_read, md5_read, u8);
 }
 
-pub struct WriteContext {
+pub struct WavPackWriter {
     context: NonNull<WavpackContext>,
     _wv: Box<WriteId>,
     _wvc: Option<Box<WriteId>>,
@@ -265,7 +265,7 @@ pub struct WriteContext {
     is_flushed: bool,
 }
 
-impl WriteContext {
+impl WavPackWriter {
     /// Pack the specified samples.
     ///
     /// Requires: `buffer.len() <= u32::MAX`
@@ -327,7 +327,7 @@ impl WriteContext {
     }
 }
 
-impl Drop for WriteContext {
+impl Drop for WavPackWriter {
     fn drop(&mut self) {
         if !self.is_flushed {
             let _ = self.flush();

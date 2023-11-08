@@ -29,7 +29,7 @@ fn char_ptr_to_string(src: *const c_char) -> Result<String> {
 /// let path = PathBuf::from("/path/to/foo.wv");
 /// let context = ContextBuilder::new(&path).tags().edit_tags().build();
 /// ```
-pub struct ContextBuilder<'a> {
+pub struct WavPackReaderBuilder<'a> {
     file_name: &'a Path,
     flag: u32,
     norm_offset: Option<i32>,
@@ -45,7 +45,7 @@ macro_rules! add_flag {
     };
 }
 
-impl<'a> ContextBuilder<'a> {
+impl<'a> WavPackReaderBuilder<'a> {
     pub fn new(file_name: &'a Path) -> Self {
         Self {
             file_name,
@@ -54,8 +54,8 @@ impl<'a> ContextBuilder<'a> {
         }
     }
 
-    pub fn build(self) -> Result<Context> {
-        Context::new(
+    pub fn build(self) -> Result<WavPackReader> {
+        WavPackReader::new(
             self.file_name,
             self.flag as i32,
             self.norm_offset.unwrap_or(0),
@@ -82,8 +82,8 @@ impl<'a> ContextBuilder<'a> {
     add_flag!(wvc, OPEN_WVC);
 }
 
-/// WavpackContext
-pub struct Context {
+/// A WavPack file reader
+pub struct WavPackReader {
     context: NonNull<WavpackContext>,
 }
 
@@ -143,7 +143,7 @@ macro_rules! def_private_fn {
 }
 
 /// Reading WavPack Files
-impl Context {
+impl WavPackReader {
     fn get_error_message(&mut self) -> Result<()> {
         let wpc = self.context.as_ptr();
         let error_message = unsafe { WavpackGetErrorMessage(wpc) };
@@ -338,7 +338,7 @@ where
 }
 
 /// Tagging Functions
-impl Context {
+impl WavPackReader {
     def_private_fn!(get_num_tag_items, WavpackGetNumTagItems, i32);
     def_private_fn!(get_num_binary_tag_items, WavpackGetNumBinaryTagItems, i32);
     fn get_tag_item_indexed(&mut self, index: i32) -> Result<CString> {
@@ -425,7 +425,7 @@ impl Context {
     }
 }
 
-impl Drop for Context {
+impl Drop for WavPackReader {
     fn drop(&mut self) {
         let wpc = self.context.as_ptr();
         unsafe { WavpackCloseFile(wpc) };
