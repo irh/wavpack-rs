@@ -2,7 +2,7 @@
 name = "wavpack-sys"
 version = "0.1.4"
 edition = "2021"
-authors = ["Toru3 <ryuutet@gmail.com>"]
+authors = ["Ian Hobson <ian.r.hobson@gmail.com>", "Toru3 <ryuutet@gmail.com>"]
 description = "C FFI binding of WavPack"
 license = "BSD-3-Clause"
 documentation = "https://docs.rs/wavpack-sys/"
