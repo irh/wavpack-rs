@@ -76,64 +76,32 @@ impl<'a> WavPackReaderBuilder<'a> {
     add_flag!(wvc, OPEN_WVC);
 }
 
+macro_rules! add_wavpack_fn {
+    ($vis:vis $fn_name:ident, $c_func:ident, $ret:ty $(, $param:ident, $param_t:ty)*) => {
+        $vis fn $fn_name(&mut self $(, $param: $param_t)*) -> Result<$ret> {
+            let wpc = self.context.as_ptr();
+            let r = unsafe { $c_func(wpc $(, $param)*) };
+            self.get_error_message()?;
+            Ok(r)
+        }
+    };
+}
+
+macro_rules! wavpack_fn {
+    ($($token:tt)*) => {
+        add_wavpack_fn!(pub $($token)*);
+    };
+}
+
+macro_rules! wavpack_fn_private {
+    ($($token:tt)*) => {
+        add_wavpack_fn!($($token)*);
+    };
+}
+
 /// A WavPack file reader
 pub struct WavPackReader {
     context: NonNull<WavpackContext>,
-}
-
-// TODO: improve this
-macro_rules! def_fn {
-    ($fn_name:ident, $c_func:ident, $ret:ty) => {
-        pub fn $fn_name(&mut self) -> Result<$ret> {
-            let wpc = self.context.as_ptr();
-            let r = unsafe { $c_func(wpc) };
-            self.get_error_message()?;
-            Ok(r)
-        }
-    };
-    ($fn_name:ident, $c_func:ident, $ret:ty, $param:ident, $param_t:ty) => {
-        pub fn $fn_name(&mut self, $param: $param_t) -> Result<$ret> {
-            let wpc = self.context.as_ptr();
-            let r = unsafe { $c_func(wpc, $param) };
-            self.get_error_message()?;
-            Ok(r)
-        }
-    };
-    ($fn_name:ident, $c_func:ident, $ret:ty, $p1:ident, $p1_t:ty, $p2:ident, $p2_t:ty) => {
-        pub fn $fn_name(&mut self, $p1: $p1_t, $p2: $p2_t) -> Result<$ret> {
-            let wpc = self.context.as_ptr();
-            let r = unsafe { $c_func(wpc, $p1, $p2) };
-            self.get_error_message()?;
-            Ok(r)
-        }
-    };
-}
-
-macro_rules! def_private_fn {
-    ($fn_name:ident, $c_func:ident, $ret:ty) => {
-        fn $fn_name(&mut self) -> Result<$ret> {
-            let wpc = self.context.as_ptr();
-            let r = unsafe { $c_func(wpc) };
-            self.get_error_message()?;
-            Ok(r)
-        }
-    };
-    ($fn_name:ident, $c_func:ident, $ret:ty, $param:ident, $param_t:ty) => {
-        fn $fn_name(&mut self, $param: $param_t) -> Result<$ret> {
-            let wpc = self.context.as_ptr();
-            let r = unsafe { $c_func(wpc, $param) };
-            self.get_error_message()?;
-            Ok(r)
-        }
-    };
-    ($fn_name:ident, $c_func:ident, $ret:ty, $p1:ident, $p1_t:ty, $p2:ident, $p2_t:ty) => {
-        fn $fn_name(&mut self, $p1: $p1_t, $p2: $p2_t) -> Result<$ret> {
-            let wpc = self.context.as_ptr();
-            let r = unsafe { $c_func(wpc, $p1, $p2) };
-            self.get_error_message()?;
-            Ok(r)
-        }
-    };
 }
 
 /// Reading WavPack Files
@@ -164,30 +132,30 @@ impl WavPackReader {
     }
 
     // TODO: WavpackOpenFileInputEx, WavpackOpenFileInputEx64
-    def_fn!(get_mode, WavpackGetMode, i32);
-    def_fn!(get_num_channels, WavpackGetNumChannels, i32);
-    def_fn!(get_reduced_channels, WavpackGetReducedChannels, i32);
-    def_fn!(get_channel_mask, WavpackGetChannelMask, i32);
-    //def_fn!(
+    wavpack_fn!(get_mode, WavpackGetMode, i32);
+    wavpack_fn!(get_num_channels, WavpackGetNumChannels, i32);
+    wavpack_fn!(get_reduced_channels, WavpackGetReducedChannels, i32);
+    wavpack_fn!(get_channel_mask, WavpackGetChannelMask, i32);
+    //wavpack_fn!(
     //    get_channel_layout,
     //    WavpackGetChannelLayout,
     //    u32,
     //    reorder,
     //    *mut u8
     //);
-    //def_fn!(
+    //wavpack_fn!(
     //    get_channel_identities,
     //    WavpackGetChannelIdentities,
     //    (),
     //    identities,
     //    *mut u8
     //);
-    def_fn!(get_sample_rate, WavpackGetSampleRate, u32);
-    def_fn!(get_native_sample_rate, WavpackGetNativeSampleRate, u32);
-    def_fn!(get_bits_per_sample, WavpackGetBitsPerSample, i32);
-    def_fn!(get_bytes_per_sample, WavpackGetBytesPerSample, i32);
-    def_fn!(get_version, WavpackGetVersion, i32);
-    def_fn!(get_file_format, WavpackGetFileFormat, u8);
+    wavpack_fn!(get_sample_rate, WavpackGetSampleRate, u32);
+    wavpack_fn!(get_native_sample_rate, WavpackGetNativeSampleRate, u32);
+    wavpack_fn!(get_bits_per_sample, WavpackGetBitsPerSample, i32);
+    wavpack_fn!(get_bytes_per_sample, WavpackGetBytesPerSample, i32);
+    wavpack_fn!(get_version, WavpackGetVersion, i32);
+    wavpack_fn!(get_file_format, WavpackGetFileFormat, u8);
     pub fn get_file_extension(&mut self) -> Result<String> {
         let wpc = self.context.as_ptr();
         let r = unsafe { WavpackGetFileExtension(wpc) };
@@ -195,20 +163,20 @@ impl WavPackReader {
         let r = char_ptr_to_string(r)?;
         Ok(r)
     }
-    def_fn!(get_qualify_mode, WavpackGetQualifyMode, i32);
-    def_fn!(get_num_samples, WavpackGetNumSamples, u32);
-    def_fn!(get_num_samples64, WavpackGetNumSamples64, i64);
-    def_fn!(get_file_size, WavpackGetFileSize, u32);
-    def_fn!(get_file_size64, WavpackGetFileSize64, i64);
-    def_fn!(get_ratio, WavpackGetRatio, f64);
-    def_fn!(
+    wavpack_fn!(get_qualify_mode, WavpackGetQualifyMode, i32);
+    wavpack_fn!(get_num_samples, WavpackGetNumSamples, u32);
+    wavpack_fn!(get_num_samples64, WavpackGetNumSamples64, i64);
+    wavpack_fn!(get_file_size, WavpackGetFileSize, u32);
+    wavpack_fn!(get_file_size64, WavpackGetFileSize64, i64);
+    wavpack_fn!(get_ratio, WavpackGetRatio, f64);
+    wavpack_fn!(
         get_average_bitrate,
         WavpackGetAverageBitrate,
         f64,
         count_wvc,
         i32
     );
-    def_fn!(get_float_norm_exp, WavpackGetFloatNormExp, i32);
+    wavpack_fn!(get_float_norm_exp, WavpackGetFloatNormExp, i32);
 
     pub fn get_md5_sum(&mut self, data: &mut [u8; 16]) -> Result<i32> {
         let wpc = self.context.as_ptr();
@@ -217,10 +185,10 @@ impl WavPackReader {
         Ok(r)
     }
 
-    //def_fn!(get_wrapper_bytes, WavpackGetWrapperBytes, u32);
-    //def_fn!(get_wrapper_data, WavpackGetWrapperData, *mut u8);
-    //def_fn!(free_wrapper, WavpackFreeWrapper, ());
-    //def_fn!(seek_trailing_wrapper, WavpackSeekTrailingWrapper, ());
+    //wavpack_fn!(get_wrapper_bytes, WavpackGetWrapperBytes, u32);
+    //wavpack_fn!(get_wrapper_data, WavpackGetWrapperData, *mut u8);
+    //wavpack_fn!(free_wrapper, WavpackFreeWrapper, ());
+    //wavpack_fn!(seek_trailing_wrapper, WavpackSeekTrailingWrapper, ());
 
     /// Unpack the specified number of samples from the current file position.
     ///
@@ -238,14 +206,14 @@ impl WavPackReader {
         Ok(r)
     }
 
-    def_fn!(seek_sample64, WavpackSeekSample64, i32, sample, i64);
-    def_fn!(seek_sample, WavpackSeekSample, i32, sample, u32);
-    def_fn!(get_sample_index64, WavpackGetSampleIndex64, i64);
-    def_fn!(get_sample_index, WavpackGetSampleIndex, u32);
-    def_fn!(get_instant_bitrate, WavpackGetInstantBitrate, f64);
-    def_fn!(get_num_errors, WavpackGetNumErrors, i32);
-    def_fn!(get_lossy_blocks, WavpackLossyBlocks, i32);
-    def_fn!(get_progress, WavpackGetProgress, f64);
+    wavpack_fn!(seek_sample64, WavpackSeekSample64, i32, sample, i64);
+    wavpack_fn!(seek_sample, WavpackSeekSample, i32, sample, u32);
+    wavpack_fn!(get_sample_index64, WavpackGetSampleIndex64, i64);
+    wavpack_fn!(get_sample_index, WavpackGetSampleIndex, u32);
+    wavpack_fn!(get_instant_bitrate, WavpackGetInstantBitrate, f64);
+    wavpack_fn!(get_num_errors, WavpackGetNumErrors, i32);
+    wavpack_fn!(get_lossy_blocks, WavpackLossyBlocks, i32);
+    wavpack_fn!(get_progress, WavpackGetProgress, f64);
 
     /// unpack from `start` (frame) to `start+length` (frame)
     ///
@@ -306,8 +274,8 @@ impl WavPackReader {
         Ok(tags)
     }
 
-    def_private_fn!(get_num_tag_items, WavpackGetNumTagItems, i32);
-    def_private_fn!(get_num_binary_tag_items, WavpackGetNumBinaryTagItems, i32);
+    wavpack_fn_private!(get_num_tag_items, WavpackGetNumTagItems, i32);
+    wavpack_fn_private!(get_num_binary_tag_items, WavpackGetNumBinaryTagItems, i32);
 
     fn get_tag_item_indexed(&mut self, index: i32) -> Result<CString> {
         let wpc = self.context.as_ptr();
