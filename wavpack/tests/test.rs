@@ -1,6 +1,5 @@
 use std::fs::remove_file;
 use std::fs::File;
-use std::path::PathBuf;
 use wavpack::*;
 
 fn make_wave(frames: usize, channels: usize, frequency: f64) -> Vec<i32> {
@@ -51,8 +50,7 @@ fn run_write_read_test(channels: usize, channel_mask: i32, file_name: &str) {
     }
 
     // read
-    let path = PathBuf::from(file_name);
-    let mut context = WavPackReader::builder(&path).build().unwrap();
+    let mut context = WavPackReader::builder(file_name).build().unwrap();
     let unpacked = context.unpack(0, 75 * 8).unwrap();
 
     // test

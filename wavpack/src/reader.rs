@@ -3,7 +3,7 @@ use std::{
     collections::BTreeMap,
     ffi::{c_char, CStr, CString},
     fmt,
-    path::Path,
+    path::PathBuf,
     ptr::NonNull,
 };
 use wavpack_sys::*;
@@ -12,14 +12,13 @@ use wavpack_sys::*;
 ///
 /// usage
 /// ```
-/// use std::path::PathBuf;
-/// use wavpack::WavPackReader;
-///
-/// let path = PathBuf::from("/path/to/foo.wv");
-/// let reader = WavPackReader::builder(&path).tags().edit_tags().build();
+/// wavpack::WavPackReader::builder("/path/to/foo.wv")
+///     .tags()
+///     .edit_tags()
+///     .build();
 /// ```
-pub struct WavPackReaderBuilder<'a> {
-    file_name: &'a Path,
+pub struct WavPackReaderBuilder {
+    file_path: PathBuf,
     flags: u32,
     norm_offset: Option<i32>,
 }
@@ -34,9 +33,9 @@ macro_rules! add_flag {
     };
 }
 
-impl<'a> WavPackReaderBuilder<'a> {
+impl WavPackReaderBuilder {
     pub fn build(self) -> Result<WavPackReader> {
-        let file_name = CString::new(self.file_name.display().to_string())?;
+        let file_name = CString::new(self.file_path.display().to_string())?;
         let mut error = vec![0 as c_char; 81]; // 80 chars + NUL
         let error_ptr = error.as_mut_ptr();
         let context = unsafe {
@@ -106,26 +105,12 @@ pub struct WavPackReader {
 
 /// Reading WavPack Files
 impl WavPackReader {
-    fn get_error_message(&mut self) -> Result<()> {
-        let wpc = self.context.as_ptr();
-        let error_message = unsafe { WavpackGetErrorMessage(wpc) };
-        if error_message.is_null() {
-            return Ok(());
-        }
-        let error_message = char_ptr_to_string(error_message)?;
-        if error_message.is_empty() {
-            Ok(())
-        } else {
-            Err(Error::Message(error_message))
-        }
-    }
-
     /// Opens a WavPack file at the given path for reading
     ///
     /// See [`WavPackReaderBuilder`] for more advanced options.
-    pub fn builder(file_name: &Path) -> WavPackReaderBuilder {
+    pub fn builder(file_path: impl Into<PathBuf>) -> WavPackReaderBuilder {
         WavPackReaderBuilder {
-            file_name,
+            file_path: file_path.into(),
             flags: 0,
             norm_offset: None,
         }
@@ -321,6 +306,20 @@ impl WavPackReader {
         let name = char_ptr_to_cstring(v_ptr)?;
         let name_len = name.to_bytes_with_nul().len();
         Ok((name, v[name_len..].to_vec()))
+    }
+
+    fn get_error_message(&mut self) -> Result<()> {
+        let wpc = self.context.as_ptr();
+        let error_message = unsafe { WavpackGetErrorMessage(wpc) };
+        if error_message.is_null() {
+            return Ok(());
+        }
+        let error_message = char_ptr_to_string(error_message)?;
+        if error_message.is_empty() {
+            Ok(())
+        } else {
+            Err(Error::Message(error_message))
+        }
     }
 }
 
