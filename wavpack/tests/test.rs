@@ -38,7 +38,7 @@ fn run_write_read_test(channels: usize, channel_mask: i32, file_name: &str) {
     // write
     {
         let file = File::create(file_name).unwrap();
-        let mut wc = WavPackWriterBuilder::new(file)
+        let mut wc = WavPackWriter::builder(file)
             .add_bytes_per_sample(2)
             .add_bits_per_sample(16)
             .add_num_channels(channels as i32)

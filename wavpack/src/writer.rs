@@ -6,12 +6,12 @@ use std::{
 };
 use wavpack_sys::*;
 
-struct WriteId {
+struct WriteHandle {
     writeable: Box<dyn Write>,
     error: Option<std::io::Error>,
 }
 
-impl WriteId {
+impl WriteHandle {
     fn new(writeable: impl Write + 'static) -> Self {
         Self {
             writeable: Box::new(writeable),
@@ -23,7 +23,7 @@ impl WriteId {
 unsafe extern "C" fn block_output(id: *mut c_void, data: *mut c_void, bcount: i32) -> c_int {
     const FALSE: c_int = 0;
     const TRUE: c_int = 1;
-    let id = id as *mut WriteId;
+    let id = id as *mut WriteHandle;
     if id.is_null() {
         return FALSE;
     } else if data.is_null() || bcount == 0 {
@@ -145,9 +145,11 @@ impl BuilderConfig {
 }
 
 /// A builder for [WavPackWriter]s
+///
+/// Created with [WavPackWriter::new].
 pub struct WavPackWriterBuilder {
-    wv: Box<WriteId>,
-    wvc: Option<Box<WriteId>>,
+    wv_handle: Box<WriteHandle>,
+    wvc_handle: Option<Box<WriteHandle>>,
     file_info: Option<FileInfomation>,
     wrap_header: Option<Vec<u8>>,
     config: BuilderConfig,
@@ -174,23 +176,13 @@ macro_rules! add_config_opt {
 }
 
 impl WavPackWriterBuilder {
-    pub fn new(writeable: impl Write + 'static) -> Self {
-        Self {
-            wv: Box::new(WriteId::new(writeable)),
-            wvc: None,
-            file_info: None,
-            wrap_header: None,
-            config: BuilderConfig::default(),
-        }
-    }
-
     pub fn build(mut self, total_samples: i64) -> Result<WavPackWriter> {
         self.config.validate()?;
 
-        let wv_ptr = &mut *self.wv as *mut WriteId as *mut c_void;
-        let wvc_ptr = match &mut self.wvc {
-            Some(x) => &mut **x as *mut WriteId,
-            None => std::ptr::null::<WriteId>(),
+        let wv_ptr = &mut *self.wv_handle as *mut WriteHandle as *mut c_void;
+        let wvc_ptr = match &mut self.wvc_handle {
+            Some(x) => &mut **x as *mut WriteHandle,
+            None => std::ptr::null::<WriteHandle>(),
         } as *mut c_void;
 
         let context = unsafe { WavpackOpenFileOutput(Some(block_output), wv_ptr, wvc_ptr) };
@@ -225,8 +217,8 @@ impl WavPackWriterBuilder {
 
         Ok(WavPackWriter {
             context: NonNull::new(context).unwrap(),
-            _wv: self.wv,
-            _wvc: self.wvc,
+            _wv: self.wv_handle,
+            _wvc: self.wvc_handle,
             config,
             is_flushed: true,
         })
@@ -235,7 +227,7 @@ impl WavPackWriterBuilder {
     /// Adds an optional .wvc correction output to the writer
     #[must_use]
     pub fn add_wvc(mut self, writeable: impl Write + 'static) -> Self {
-        self.wvc = Some(Box::new(WriteId::new(writeable)));
+        self.wvc_handle = Some(Box::new(WriteHandle::new(writeable)));
         self
     }
 
@@ -263,16 +255,26 @@ impl WavPackWriterBuilder {
 /// See [WavPackWriterBuilder]
 pub struct WavPackWriter {
     context: NonNull<WavpackContext>,
-    _wv: Box<WriteId>,
-    _wvc: Option<Box<WriteId>>,
+    _wv: Box<WriteHandle>,
+    _wvc: Option<Box<WriteHandle>>,
     config: WavpackConfig,
     is_flushed: bool,
 }
 
 impl WavPackWriter {
+    pub fn builder(writeable: impl Write + 'static) -> WavPackWriterBuilder {
+        WavPackWriterBuilder {
+            wv_handle: Box::new(WriteHandle::new(writeable)),
+            wvc_handle: None,
+            file_info: None,
+            wrap_header: None,
+            config: BuilderConfig::default(),
+        }
+    }
+
     /// Pack the specified samples.
     ///
-    /// Requires: `buffer.len() <= u32::MAX`
+    /// Requires: `samples.len() <= u32::MAX`
     pub fn pack_samples(&mut self, samples: &mut [i32]) -> Result<()> {
         let len = samples.len() / self.config.num_channels as usize;
         if usize::BITS >= u32::BITS && len > u32::MAX as usize {
