@@ -96,8 +96,10 @@ struct BuilderConfig {
     //tag_strings: Option<Vec<String>>,
 }
 
-impl BuilderConfig {
-    fn validate(&self) -> Result<()> {
+impl TryInto<WavpackConfig> for BuilderConfig {
+    type Error = Error;
+
+    fn try_into(self) -> Result<WavpackConfig> {
         let mut v = Vec::new();
         if self.bytes_per_sample.is_none() {
             v.push("bytes_per_sample");
@@ -114,15 +116,11 @@ impl BuilderConfig {
         if self.sample_rate.is_none() {
             v.push("sample_rate");
         }
-        if v.is_empty() {
-            Ok(())
-        } else {
-            Err(Error::RequiredParameterNotSet(v))
+        if !v.is_empty() {
+            return Err(Error::RequiredParameterNotSet(v));
         }
-    }
 
-    fn convert(self) -> WavpackConfig {
-        WavpackConfig {
+        let result = WavpackConfig {
             bitrate: self.bitrate.unwrap_or(0.),
             shaping_weight: self.shaping_weight.unwrap_or(0.),
             bits_per_sample: self.bits_per_sample.unwrap(),
@@ -140,7 +138,9 @@ impl BuilderConfig {
             md5_read: self.md5_read.unwrap_or(0),
             num_tag_strings: 0,
             tag_strings: std::ptr::null::<*mut c_char>() as *mut _,
-        }
+        };
+
+        Ok(result)
     }
 }
 
@@ -177,7 +177,7 @@ macro_rules! add_config_opt {
 
 impl WavPackWriterBuilder {
     pub fn build(mut self, total_samples: i64) -> Result<WavPackWriter> {
-        self.config.validate()?;
+        let mut config = self.config.try_into()?;
 
         let wv_ptr = &mut *self.wv_handle as *mut WriteHandle as *mut c_void;
         let wvc_ptr = match &mut self.wvc_handle {
@@ -208,7 +208,6 @@ impl WavPackWriterBuilder {
             }
         }
 
-        let mut config = self.config.convert();
         let config_ptr = &mut config as *mut _;
         unsafe {
             WavpackSetConfiguration64(context, config_ptr, total_samples, std::ptr::null());
