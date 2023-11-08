@@ -8,14 +8,15 @@ use std::{
 };
 use wavpack_sys::*;
 
-/// Builder of Context
+/// A builder for [WavPackReader]s
 ///
 /// usage
 /// ```
 /// use std::path::PathBuf;
-/// use wavpack::ContextBuilder;
+/// use wavpack::WavPackReader;
+///
 /// let path = PathBuf::from("/path/to/foo.wv");
-/// let context = ContextBuilder::new(&path).tags().edit_tags().build();
+/// let reader = WavPackReader::builder(&path).tags().edit_tags().build();
 /// ```
 pub struct WavPackReaderBuilder<'a> {
     file_name: &'a Path,
@@ -34,20 +35,25 @@ macro_rules! add_flag {
 }
 
 impl<'a> WavPackReaderBuilder<'a> {
-    pub fn new(file_name: &'a Path) -> Self {
-        Self {
-            file_name,
-            flags: 0,
-            norm_offset: None,
-        }
-    }
-
     pub fn build(self) -> Result<WavPackReader> {
-        WavPackReader::new(
-            self.file_name,
-            self.flags as i32,
-            self.norm_offset.unwrap_or(0),
-        )
+        let file_name = CString::new(self.file_name.display().to_string())?;
+        let mut error = vec![0 as c_char; 81]; // 80 chars + NUL
+        let error_ptr = error.as_mut_ptr();
+        let context = unsafe {
+            WavpackOpenFileInput(
+                file_name.as_ptr(),
+                error_ptr,
+                self.flags as i32,
+                self.norm_offset.unwrap_or(0),
+            )
+        };
+        match NonNull::new(context) {
+            None => {
+                let error = char_ptr_to_string(error_ptr)?;
+                Err(Error::Message(error))
+            }
+            Some(context) => Ok(WavPackReader { context }),
+        }
     }
 
     #[must_use]
@@ -146,21 +152,14 @@ impl WavPackReader {
         }
     }
 
-    /// Open file to read.
+    /// Opens a WavPack file at the given path for reading
     ///
-    /// See [`WavPackReaderBuilder`] for more advanced options
-    pub fn new(file_name: &Path, flags: i32, norm_offset: i32) -> Result<Self> {
-        let file_name = CString::new(file_name.display().to_string())?;
-        let file_name = file_name.as_ptr();
-        let mut error = vec![0 as c_char; 81]; // 80 chars + NUL
-        let error_ptr = error.as_mut_ptr();
-        let context = unsafe { WavpackOpenFileInput(file_name, error_ptr, flags, norm_offset) };
-        match NonNull::new(context) {
-            None => {
-                let error = char_ptr_to_string(error_ptr)?;
-                Err(Error::Message(error))
-            }
-            Some(context) => Ok(Self { context }),
+    /// See [`WavPackReaderBuilder`] for more advanced options.
+    pub fn builder(file_name: &Path) -> WavPackReaderBuilder {
+        WavPackReaderBuilder {
+            file_name,
+            flags: 0,
+            norm_offset: None,
         }
     }
 
