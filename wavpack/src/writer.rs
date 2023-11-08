@@ -20,31 +20,6 @@ impl WriteHandle {
     }
 }
 
-unsafe extern "C" fn block_output(id: *mut c_void, data: *mut c_void, bcount: i32) -> c_int {
-    const FALSE: c_int = 0;
-    const TRUE: c_int = 1;
-    let id = id as *mut WriteHandle;
-    if id.is_null() {
-        return FALSE;
-    } else if data.is_null() || bcount == 0 {
-        return TRUE;
-    } else if bcount < 0 {
-        return FALSE;
-    }
-    let id = &mut *id;
-    if id.error.is_some() {
-        return FALSE;
-    }
-    let data = std::slice::from_raw_parts_mut(data as *mut u8, bcount as usize);
-    match id.writeable.write_all(data) {
-        Ok(_) => TRUE,
-        Err(x) => {
-            id.error = Some(x);
-            FALSE
-        }
-    }
-}
-
 /// File format
 #[derive(Clone, Copy, Debug)]
 #[non_exhaustive]
@@ -185,7 +160,7 @@ impl WavPackWriterBuilder {
             None => std::ptr::null::<WriteHandle>(),
         } as *mut c_void;
 
-        let context = unsafe { WavpackOpenFileOutput(Some(block_output), wv_ptr, wvc_ptr) };
+        let context = unsafe { WavpackOpenFileOutput(Some(write_block), wv_ptr, wvc_ptr) };
         if context.is_null() {
             return Err(Error::OpenFileOutputFailed);
         }
@@ -328,5 +303,34 @@ impl Drop for WavPackWriter {
         }
         let wpc = self.context.as_ptr();
         unsafe { WavpackCloseFile(wpc) };
+    }
+}
+
+// Writes the WavPack block to the WavPackWriter's writeable
+extern "C" fn write_block(write_handle: *mut c_void, data: *mut c_void, bcount: i32) -> c_int {
+    const FALSE: c_int = 0;
+    const TRUE: c_int = 1;
+
+    let write_handle = write_handle as *mut WriteHandle;
+    if write_handle.is_null() {
+        return FALSE;
+    } else if data.is_null() || bcount == 0 {
+        return TRUE;
+    } else if bcount < 0 {
+        return FALSE;
+    }
+
+    let write_handle = unsafe { &mut *write_handle };
+    if write_handle.error.is_some() {
+        return FALSE;
+    }
+
+    let data = unsafe { std::slice::from_raw_parts_mut(data as *mut u8, bcount as usize) };
+    match write_handle.writeable.write_all(data) {
+        Ok(_) => TRUE,
+        Err(x) => {
+            write_handle.error = Some(x);
+            FALSE
+        }
     }
 }
