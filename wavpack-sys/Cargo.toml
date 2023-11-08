@@ -1,15 +1,19 @@
 [package]
 name = "wavpack-sys"
 version = "0.1.4"
-edition = "2018"
-authors = ["Toru3 <ryuutet@gmail.com>"]
+edition = "2021"
+authors = ["Ian Hobson <ian.r.hobson@gmail.com>", "Toru3 <ryuutet@gmail.com>"]
 description = "C FFI binding of WavPack"
 license = "BSD-3-Clause"
 documentation = "https://docs.rs/wavpack-sys/"
 repository = "https://gitlab.com/Toru3/wavpack-rs"
 readme = "../README.md"
 keywords = ["WavPack", "audio", "encode", "decode", "ffi"]
-categories = ["external-ffi-bindings", "multimedia::audio", "multimedia::encoding"]
+categories = [
+  "external-ffi-bindings",
+  "multimedia::audio",
+  "multimedia::encoding",
+]
 
 [dependencies]
 

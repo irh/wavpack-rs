@@ -1,6 +1,5 @@
 use std::fs::remove_file;
 use std::fs::File;
-use std::path::PathBuf;
 use wavpack::*;
 
 fn make_wave(frames: usize, channels: usize, frequency: f64) -> Vec<i32> {
@@ -17,7 +16,7 @@ fn make_wave(frames: usize, channels: usize, frequency: f64) -> Vec<i32> {
 }
 
 fn seq(channels: usize) -> Vec<i32> {
-    vec![
+    [
         make_wave(44100, channels, 277.183),
         make_wave(44100, channels, 293.665),
         make_wave(44100, channels, 329.628),
@@ -29,7 +28,7 @@ fn seq(channels: usize) -> Vec<i32> {
     ]
     .into_iter()
     .flatten()
-    .collect::<Vec<_>>()
+    .collect()
 }
 
 fn run_write_read_test(channels: usize, channel_mask: i32, file_name: &str) {
@@ -38,7 +37,7 @@ fn run_write_read_test(channels: usize, channel_mask: i32, file_name: &str) {
     // write
     {
         let file = File::create(file_name).unwrap();
-        let mut wc = WriteBuilder::new(file)
+        let mut wc = WavPackWriter::builder(file)
             .add_bytes_per_sample(2)
             .add_bits_per_sample(16)
             .add_num_channels(channels as i32)
@@ -51,8 +50,7 @@ fn run_write_read_test(channels: usize, channel_mask: i32, file_name: &str) {
     }
 
     // read
-    let path = PathBuf::from(file_name);
-    let mut context = ContextBuilder::new(&path).build().unwrap();
+    let mut context = WavPackReader::builder(file_name).build().unwrap();
     let unpacked = context.unpack(0, 75 * 8).unwrap();
 
     // test

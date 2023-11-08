@@ -1,2 +1,3 @@
 [workspace]
 members = ["wavpack-sys", "wavpack"]
+resolver = "2"
