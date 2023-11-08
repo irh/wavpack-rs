@@ -145,11 +145,11 @@ impl BuilderConfig {
 }
 
 /// A builder for [WavPackWriter]s
-pub struct WavPackWriterBuilder<'a> {
+pub struct WavPackWriterBuilder {
     wv: Box<WriteId>,
     wvc: Option<Box<WriteId>>,
     file_info: Option<FileInfomation>,
-    wrap_header: Option<&'a mut [u8]>,
+    wrap_header: Option<Vec<u8>>,
     config: BuilderConfig,
 }
 
@@ -173,7 +173,7 @@ macro_rules! add_config_opt {
     };
 }
 
-impl<'a> WavPackWriterBuilder<'a> {
+impl WavPackWriterBuilder {
     pub fn new(writeable: impl Write + 'static) -> Self {
         Self {
             wv: Box::new(WriteId::new(writeable)),
@@ -207,7 +207,7 @@ impl<'a> WavPackWriterBuilder<'a> {
             }
         }
 
-        if let Some(wrap_header) = self.wrap_header {
+        if let Some(wrap_header) = &mut self.wrap_header {
             let ptr = wrap_header.as_mut_ptr() as *mut c_void;
             let len = wrap_header.len() as u32;
             if unsafe { WavpackAddWrapper(context, ptr, len) } == 0 {
@@ -240,7 +240,7 @@ impl<'a> WavPackWriterBuilder<'a> {
     }
 
     add_opt!(add_file_info, file_info, FileInfomation);
-    add_opt!(add_wrapper, wrap_header, &'a mut [u8]);
+    add_opt!(add_wrapper, wrap_header, Vec<u8>);
     add_config_opt!(add_bitrate, bitrate, f32);
     add_config_opt!(add_shaping_weight, shaping_weight, f32);
     add_config_opt!(add_bits_per_sample, bits_per_sample, i32);
@@ -315,17 +315,6 @@ impl WavPackWriter {
         self.is_flushed = false;
         if unsafe { WavpackStoreMD5Sum(wpc, ptr) } == 0 {
             return Err(Error::StoreMD5SumFailed);
-        }
-        Ok(())
-    }
-
-    pub fn add_wrapper(&mut self, data: &mut [u8]) -> Result<()> {
-        let wpc = self.context.as_ptr();
-        let ptr = data.as_mut_ptr() as *mut c_void;
-        let len = data.len() as u32;
-        self.is_flushed = false;
-        if unsafe { WavpackAddWrapper(wpc, ptr, len) } == 0 {
-            return Err(Error::AddWrapperFailed);
         }
         Ok(())
     }
