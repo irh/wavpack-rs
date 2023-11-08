@@ -6,6 +6,9 @@ use std::{
 };
 use wavpack_sys::*;
 
+const FALSE: c_int = 0;
+const TRUE: c_int = 1;
+
 struct WriteHandle {
     writeable: Box<dyn Write>,
     error: Option<std::io::Error>,
@@ -177,7 +180,7 @@ impl WavPackWriterBuilder {
         if let Some(wrap_header) = &mut self.wrap_header {
             let ptr = wrap_header.as_mut_ptr() as *mut c_void;
             let len = wrap_header.len() as u32;
-            if unsafe { WavpackAddWrapper(context, ptr, len) } == 0 {
+            if unsafe { WavpackAddWrapper(context, ptr, len) } == FALSE {
                 unsafe { WavpackCloseFile(context) };
                 return Err(Error::AddWrapperFailed);
             }
@@ -258,7 +261,7 @@ impl WavPackWriter {
         let ptr = samples.as_mut_ptr();
         let len = len as u32;
         self.is_flushed = false;
-        if unsafe { WavpackPackSamples(wpc, ptr, len) } == 0 {
+        if unsafe { WavpackPackSamples(wpc, ptr, len) } == FALSE {
             return Err(Error::PackSamplesFailed);
         }
         Ok(())
@@ -273,7 +276,7 @@ impl WavPackWriter {
     /// those holding metadata for MD5 sums or file trailers
     pub fn flush(&mut self) -> Result<()> {
         let wpc = self.context.as_ptr();
-        if unsafe { WavpackFlushSamples(wpc) } == 0 {
+        if unsafe { WavpackFlushSamples(wpc) } == FALSE {
             return Err(Error::PackFlushFailed);
         }
         self.is_flushed = true;
@@ -289,7 +292,7 @@ impl WavPackWriter {
         let wpc = self.context.as_ptr();
         let ptr = data.as_mut_ptr();
         self.is_flushed = false;
-        if unsafe { WavpackStoreMD5Sum(wpc, ptr) } == 0 {
+        if unsafe { WavpackStoreMD5Sum(wpc, ptr) } == FALSE {
             return Err(Error::StoreMD5SumFailed);
         }
         Ok(())
@@ -308,9 +311,6 @@ impl Drop for WavPackWriter {
 
 // Writes the WavPack block to the WavPackWriter's writeable
 extern "C" fn write_block(write_handle: *mut c_void, data: *mut c_void, bcount: i32) -> c_int {
-    const FALSE: c_int = 0;
-    const TRUE: c_int = 1;
-
     let write_handle = write_handle as *mut WriteHandle;
     if write_handle.is_null() {
         return FALSE;
