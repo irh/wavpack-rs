@@ -43,7 +43,7 @@ fn run_write_read_test(channels: usize, channel_mask: i32, file_name: &str) {
             .add_num_channels(channels as i32)
             .add_channel_mask(channel_mask)
             .add_sample_rate(44100)
-            .build(-1)
+            .build()
             .unwrap();
 
         wc.pack_samples(&mut input).unwrap();

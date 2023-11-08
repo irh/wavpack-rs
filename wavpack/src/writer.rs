@@ -130,6 +130,7 @@ pub struct WavPackWriterBuilder {
     wvc_handle: Option<Box<WriteHandle>>,
     file_info: Option<FileInfomation>,
     wrap_header: Option<Vec<u8>>,
+    total_samples: Option<i64>,
     config: BuilderConfig,
 }
 
@@ -154,7 +155,7 @@ macro_rules! add_config_opt {
 }
 
 impl WavPackWriterBuilder {
-    pub fn build(mut self, total_samples: i64) -> Result<WavPackWriter> {
+    pub fn build(mut self) -> Result<WavPackWriter> {
         let mut config = self.config.try_into()?;
 
         let wv_ptr = &mut *self.wv_handle as *mut WriteHandle as *mut c_void;
@@ -188,7 +189,12 @@ impl WavPackWriterBuilder {
 
         let config_ptr = &mut config as *mut _;
         unsafe {
-            WavpackSetConfiguration64(context, config_ptr, total_samples, std::ptr::null());
+            WavpackSetConfiguration64(
+                context,
+                config_ptr,
+                self.total_samples.unwrap_or(-1),
+                std::ptr::null(),
+            );
             WavpackPackInit(context);
         }
 
@@ -210,6 +216,7 @@ impl WavPackWriterBuilder {
 
     add_opt!(add_file_info, file_info, FileInfomation);
     add_opt!(add_wrapper, wrap_header, Vec<u8>);
+    add_opt!(set_total_samples, total_samples, i64);
     add_config_opt!(add_bitrate, bitrate, f32);
     add_config_opt!(add_shaping_weight, shaping_weight, f32);
     add_config_opt!(add_bits_per_sample, bits_per_sample, i32);
@@ -245,6 +252,7 @@ impl WavPackWriter {
             wvc_handle: None,
             file_info: None,
             wrap_header: None,
+            total_samples: None,
             config: BuilderConfig::default(),
         }
     }
