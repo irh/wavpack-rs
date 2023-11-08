@@ -2,23 +2,11 @@ use crate::{Error, Result};
 use std::{
     collections::BTreeMap,
     ffi::{c_char, CStr, CString},
+    fmt,
     path::Path,
     ptr::NonNull,
 };
 use wavpack_sys::*;
-
-fn char_ptr_to_cstring(src: *const c_char) -> Result<CString> {
-    if src.is_null() {
-        Err(Error::NullPointer)
-    } else {
-        let cstr = unsafe { CStr::from_ptr(src) };
-        Ok(cstr.to_owned())
-    }
-}
-
-fn char_ptr_to_string(src: *const c_char) -> Result<String> {
-    Ok(char_ptr_to_cstring(src)?.into_string()?)
-}
 
 /// Builder of Context
 ///
@@ -31,7 +19,7 @@ fn char_ptr_to_string(src: *const c_char) -> Result<String> {
 /// ```
 pub struct WavPackReaderBuilder<'a> {
     file_name: &'a Path,
-    flag: u32,
+    flags: u32,
     norm_offset: Option<i32>,
 }
 
@@ -39,7 +27,7 @@ macro_rules! add_flag {
     ($fn_name:ident, $flag:ident) => {
         #[must_use]
         pub fn $fn_name(mut self) -> Self {
-            self.flag |= $flag;
+            self.flags |= $flag;
             self
         }
     };
@@ -49,7 +37,7 @@ impl<'a> WavPackReaderBuilder<'a> {
     pub fn new(file_name: &'a Path) -> Self {
         Self {
             file_name,
-            flag: 0,
+            flags: 0,
             norm_offset: None,
         }
     }
@@ -57,14 +45,14 @@ impl<'a> WavPackReaderBuilder<'a> {
     pub fn build(self) -> Result<WavPackReader> {
         WavPackReader::new(
             self.file_name,
-            self.flag as i32,
+            self.flags as i32,
             self.norm_offset.unwrap_or(0),
         )
     }
 
     #[must_use]
     pub fn normalize(mut self, norm_offset: i32) -> Self {
-        self.flag |= OPEN_NORMALIZE;
+        self.flags |= OPEN_NORMALIZE;
         self.norm_offset = Some(norm_offset);
         self
     }
@@ -160,13 +148,13 @@ impl WavPackReader {
 
     /// Open file to read.
     ///
-    /// I recommend you use [`ContextBuilder`].
-    pub fn new(file_name: &Path, flag: i32, norm_offset: i32) -> Result<Self> {
+    /// See [`WavPackReaderBuilder`] for more advanced options
+    pub fn new(file_name: &Path, flags: i32, norm_offset: i32) -> Result<Self> {
         let file_name = CString::new(file_name.display().to_string())?;
         let file_name = file_name.as_ptr();
         let mut error = vec![0 as c_char; 81]; // 80 chars + NUL
         let error_ptr = error.as_mut_ptr();
-        let context = unsafe { WavpackOpenFileInput(file_name, error_ptr, flag, norm_offset) };
+        let context = unsafe { WavpackOpenFileInput(file_name, error_ptr, flags, norm_offset) };
         match NonNull::new(context) {
             None => {
                 let error = char_ptr_to_string(error_ptr)?;
@@ -262,7 +250,7 @@ impl WavPackReader {
 
     /// unpack from `start` (frame) to `start+length` (frame)
     ///
-    /// [frames par second = 75](https://en.wikipedia.org/wiki/Compact_Disc_Digital_Audio#Frames_and_timecode_frames)
+    /// [frames per second = 75](https://en.wikipedia.org/wiki/Compact_Disc_Digital_Audio#Frames_and_timecode_frames)
     pub fn unpack(&mut self, start: i64, length: i64) -> Result<Vec<i32>> {
         const FRAME_PER_SECOND: i64 = 75;
         let channels = self.get_num_channels()? as i64;
@@ -281,66 +269,47 @@ impl WavPackReader {
         self.unpack_samples(&mut buf)?;
         Ok(buf)
     }
-}
 
-pub type BinaryTag = (String, Vec<u8>);
-
-/// Tag data
-#[derive(Clone)]
-pub enum TagData {
-    /// text data
-    Text(String),
-    /// filename, binary data
-    Binary(String, Vec<u8>),
-}
-
-impl std::fmt::Debug for TagData {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use TagData::*;
-        match self {
-            Text(x) => f.debug_tuple("Text").field(&x).finish(),
-            Binary(name, data) => {
-                let len = data.len();
-                f.debug_tuple("Binary")
-                    .field(&name)
-                    .field(&format!("{len}-byte binary item"))
-                    .finish()
-            }
+    /// Get text tags
+    pub fn get_text_tag_items(&mut self) -> Result<Vec<(String, String)>> {
+        let n = self.get_num_tag_items()?;
+        let mut v = Vec::with_capacity(n as usize);
+        for i in 0..n {
+            let key = self.get_tag_item_indexed(i)?;
+            let val = self.get_tag_item(&key)?.into_string()?;
+            v.push((key.into_string()?, val));
         }
+        Ok(v)
     }
-}
 
-fn check_and_get_text<F>(mut func: F) -> Result<CString>
-where
-    F: FnMut(*mut c_char, i32) -> Result<i32>,
-{
-    let nullptr = std::ptr::null::<c_char>() as *mut c_char;
-    let len = func(nullptr, 0)?;
-    let size = len + 1; // NUL byte
-    let mut buf = vec![0 as c_char; size as usize];
-    let buf_ptr = buf.as_mut_ptr();
-    let n_len = func(buf_ptr, size)?;
-    assert_eq!(len, n_len);
-    char_ptr_to_cstring(buf_ptr)
-}
+    /// Get binary tags
+    pub fn get_binary_tag_items(&mut self) -> Result<Vec<(String, BinaryTag)>> {
+        let n = self.get_num_binary_tag_items()?;
+        let mut v = Vec::with_capacity(n as usize);
+        for i in 0..n {
+            let key = self.get_binary_tag_item_indexed(i)?;
+            let (v_name, v_data) = self.get_binary_tag_item(&key)?;
+            v.push((key.into_string()?, (v_name.into_string()?, v_data)));
+        }
+        Ok(v)
+    }
 
-fn check_and_get_binary<F>(mut func: F) -> Result<Vec<u8>>
-where
-    F: FnMut(*mut c_char, i32) -> Result<i32>,
-{
-    let nullptr = std::ptr::null::<c_char>() as *mut c_char;
-    let len = func(nullptr, 0)?;
-    let mut buf = vec![0u8; len as usize];
-    let buf_ptr = buf.as_mut_ptr() as *mut i8;
-    let n_len = func(buf_ptr, len)?;
-    assert_eq!(len, n_len);
-    Ok(buf)
-}
+    /// Get text and binary tags
+    pub fn get_all_tag_items(&mut self) -> Result<BTreeMap<String, TagData>> {
+        use TagData::*;
+        let mut tags = BTreeMap::new();
+        for (key, val) in self.get_text_tag_items()? {
+            tags.insert(key, Text(val));
+        }
+        for (key, (v_name, v_data)) in self.get_binary_tag_items()? {
+            tags.insert(key, Binary((v_name, v_data)));
+        }
+        Ok(tags)
+    }
 
-/// Tagging Functions
-impl WavPackReader {
     def_private_fn!(get_num_tag_items, WavpackGetNumTagItems, i32);
     def_private_fn!(get_num_binary_tag_items, WavpackGetNumBinaryTagItems, i32);
+
     fn get_tag_item_indexed(&mut self, index: i32) -> Result<CString> {
         let wpc = self.context.as_ptr();
         let func = |ptr, size| {
@@ -386,43 +355,6 @@ impl WavPackReader {
         let name_len = name.to_bytes_with_nul().len();
         Ok((name, v[name_len..].to_vec()))
     }
-
-    /// Get text tags
-    pub fn get_text_tag_items(&mut self) -> Result<Vec<(String, String)>> {
-        let n = self.get_num_tag_items()?;
-        let mut v = Vec::with_capacity(n as usize);
-        for i in 0..n {
-            let key = self.get_tag_item_indexed(i)?;
-            let val = self.get_tag_item(&key)?.into_string()?;
-            v.push((key.into_string()?, val));
-        }
-        Ok(v)
-    }
-
-    /// Get binary tags
-    pub fn get_binary_tag_items(&mut self) -> Result<Vec<(String, BinaryTag)>> {
-        let n = self.get_num_binary_tag_items()?;
-        let mut v = Vec::with_capacity(n as usize);
-        for i in 0..n {
-            let key = self.get_binary_tag_item_indexed(i)?;
-            let (v_name, v_data) = self.get_binary_tag_item(&key)?;
-            v.push((key.into_string()?, (v_name.into_string()?, v_data)));
-        }
-        Ok(v)
-    }
-
-    /// Get text and binary tags
-    pub fn get_all_tag_items(&mut self) -> Result<BTreeMap<String, TagData>> {
-        use TagData::*;
-        let mut tags = BTreeMap::new();
-        for (key, val) in self.get_text_tag_items()? {
-            tags.insert(key, Text(val));
-        }
-        for (key, (v_name, v_data)) in self.get_binary_tag_items()? {
-            tags.insert(key, Binary(v_name, v_data));
-        }
-        Ok(tags)
-    }
 }
 
 impl Drop for WavPackReader {
@@ -430,4 +362,72 @@ impl Drop for WavPackReader {
         let wpc = self.context.as_ptr();
         unsafe { WavpackCloseFile(wpc) };
     }
+}
+
+/// Filename, binary data
+pub type BinaryTag = (String, Vec<u8>);
+
+/// Tag data
+#[derive(Clone)]
+pub enum TagData {
+    /// Text data
+    Text(String),
+    /// Binary data
+    Binary(BinaryTag),
+}
+
+impl fmt::Debug for TagData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use TagData::*;
+        match self {
+            Text(x) => f.debug_tuple("Text").field(&x).finish(),
+            Binary((name, data)) => {
+                let len = data.len();
+                f.debug_tuple("Binary")
+                    .field(&name)
+                    .field(&format!("{len}-byte binary item"))
+                    .finish()
+            }
+        }
+    }
+}
+
+fn check_and_get_text<F>(mut func: F) -> Result<CString>
+where
+    F: FnMut(*mut c_char, i32) -> Result<i32>,
+{
+    let nullptr = std::ptr::null::<c_char>() as *mut c_char;
+    let len = func(nullptr, 0)?;
+    let size = len + 1; // NUL byte
+    let mut buf = vec![0 as c_char; size as usize];
+    let buf_ptr = buf.as_mut_ptr();
+    let n_len = func(buf_ptr, size)?;
+    assert_eq!(len, n_len);
+    char_ptr_to_cstring(buf_ptr)
+}
+
+fn check_and_get_binary<F>(mut func: F) -> Result<Vec<u8>>
+where
+    F: FnMut(*mut c_char, i32) -> Result<i32>,
+{
+    let nullptr = std::ptr::null::<c_char>() as *mut c_char;
+    let len = func(nullptr, 0)?;
+    let mut buf = vec![0u8; len as usize];
+    let buf_ptr = buf.as_mut_ptr() as *mut i8;
+    let n_len = func(buf_ptr, len)?;
+    assert_eq!(len, n_len);
+    Ok(buf)
+}
+
+fn char_ptr_to_cstring(src: *const c_char) -> Result<CString> {
+    if src.is_null() {
+        Err(Error::NullPointer)
+    } else {
+        let cstr = unsafe { CStr::from_ptr(src) };
+        Ok(cstr.to_owned())
+    }
+}
+
+fn char_ptr_to_string(src: *const c_char) -> Result<String> {
+    Ok(char_ptr_to_cstring(src)?.into_string()?)
 }

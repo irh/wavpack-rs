@@ -76,7 +76,7 @@ pub struct FileInfomation {
 }
 
 #[derive(Clone, Debug, Default)]
-struct Config {
+struct BuilderConfig {
     bitrate: Option<f32>,
     shaping_weight: Option<f32>,
     bits_per_sample: Option<i32>,
@@ -96,7 +96,7 @@ struct Config {
     //tag_strings: Option<Vec<String>>,
 }
 
-impl Config {
+impl BuilderConfig {
     fn validate(&self) -> Result<()> {
         let mut v = Vec::new();
         if self.bytes_per_sample.is_none() {
@@ -144,12 +144,13 @@ impl Config {
     }
 }
 
+/// A builder for [WavPackWriter]s
 pub struct WavPackWriterBuilder<'a> {
     wv: Box<WriteId>,
     wvc: Option<Box<WriteId>>,
     file_info: Option<FileInfomation>,
     wrap_header: Option<&'a mut [u8]>,
-    config: Config,
+    config: BuilderConfig,
 }
 
 macro_rules! add_opt {
@@ -179,16 +180,7 @@ impl<'a> WavPackWriterBuilder<'a> {
             wvc: None,
             file_info: None,
             wrap_header: None,
-            config: Config::default(),
-        }
-    }
-
-    fn set_file_info(wpc: *mut WavpackContext, x: FileInfomation) {
-        let mut file_extension = x.extension.as_bytes().to_vec();
-        let file_extension_ptr = file_extension.as_mut_ptr() as *mut _;
-        let file_format = x.format.to_u8();
-        unsafe {
-            WavpackSetFileInformation(wpc, file_extension_ptr, file_format);
+            config: BuilderConfig::default(),
         }
     }
 
@@ -201,37 +193,46 @@ impl<'a> WavPackWriterBuilder<'a> {
             None => std::ptr::null::<WriteId>(),
         } as *mut c_void;
 
-        let wpc = unsafe { WavpackOpenFileOutput(Some(block_output), wv_ptr, wvc_ptr) };
-        if wpc.is_null() {
+        let context = unsafe { WavpackOpenFileOutput(Some(block_output), wv_ptr, wvc_ptr) };
+        if context.is_null() {
             return Err(Error::OpenFileOutputFailed);
         }
-        if let Some(x) = self.file_info {
-            Self::set_file_info(wpc, x);
+
+        if let Some(file_info) = self.file_info {
+            let mut file_extension = file_info.extension.as_bytes().to_vec();
+            let file_extension_ptr = file_extension.as_mut_ptr() as *mut _;
+            let file_format = file_info.format.to_u8();
+            unsafe {
+                WavpackSetFileInformation(context, file_extension_ptr, file_format);
+            }
         }
-        if let Some(x) = self.wrap_header {
-            let ptr = x.as_mut_ptr() as *mut c_void;
-            let len = x.len() as u32;
-            if unsafe { WavpackAddWrapper(wpc, ptr, len) } == 0 {
-                unsafe { WavpackCloseFile(wpc) };
+
+        if let Some(wrap_header) = self.wrap_header {
+            let ptr = wrap_header.as_mut_ptr() as *mut c_void;
+            let len = wrap_header.len() as u32;
+            if unsafe { WavpackAddWrapper(context, ptr, len) } == 0 {
+                unsafe { WavpackCloseFile(context) };
                 return Err(Error::AddWrapperFailed);
             }
         }
+
         let mut config = self.config.convert();
         let config_ptr = &mut config as *mut _;
         unsafe {
-            WavpackSetConfiguration64(wpc, config_ptr, total_samples, std::ptr::null());
-            WavpackPackInit(wpc);
+            WavpackSetConfiguration64(context, config_ptr, total_samples, std::ptr::null());
+            WavpackPackInit(context);
         }
-        let context = WavPackWriter {
-            context: NonNull::new(wpc).unwrap(),
+
+        Ok(WavPackWriter {
+            context: NonNull::new(context).unwrap(),
             _wv: self.wv,
             _wvc: self.wvc,
             config,
             is_flushed: true,
-        };
-        Ok(context)
+        })
     }
 
+    /// Adds an optional .wvc correction output to the writer
     #[must_use]
     pub fn add_wvc(mut self, writeable: impl Write + 'static) -> Self {
         self.wvc = Some(Box::new(WriteId::new(writeable)));
@@ -257,6 +258,9 @@ impl<'a> WavPackWriterBuilder<'a> {
     add_config_opt!(add_md5_read, md5_read, u8);
 }
 
+/// A writer for WavPack files
+///
+/// See [WavPackWriterBuilder]
 pub struct WavPackWriter {
     context: NonNull<WavpackContext>,
     _wv: Box<WriteId>,
