@@ -8,16 +8,16 @@ use std::{
 };
 use wavpack_sys::*;
 
-/// A builder for [WavPackReader]s
+/// A builder for [WavpackReader]s
 ///
 /// usage
 /// ```
-/// wavpack::WavPackReader::builder("/path/to/foo.wv")
+/// wavpack::WavpackReader::builder("/path/to/foo.wv")
 ///     .tags()
 ///     .edit_tags()
 ///     .build();
 /// ```
-pub struct WavPackReaderBuilder {
+pub struct WavpackReaderBuilder {
     file_path: PathBuf,
     flags: u32,
     norm_offset: Option<i32>,
@@ -33,8 +33,8 @@ macro_rules! add_flag {
     };
 }
 
-impl WavPackReaderBuilder {
-    pub fn build(self) -> Result<WavPackReader> {
+impl WavpackReaderBuilder {
+    pub fn build(self) -> Result<WavpackReader> {
         let file_name = CString::new(self.file_path.display().to_string())?;
         let mut error = vec![0 as c_char; 81]; // 80 chars + NUL
         let error_ptr = error.as_mut_ptr();
@@ -51,7 +51,7 @@ impl WavPackReaderBuilder {
                 let error = char_ptr_to_string(error_ptr)?;
                 Err(Error::Message(error))
             }
-            Some(context) => Ok(WavPackReader { context }),
+            Some(context) => Ok(WavpackReader { context }),
         }
     }
 
@@ -99,17 +99,16 @@ macro_rules! wavpack_fn_private {
 }
 
 /// A WavPack file reader
-pub struct WavPackReader {
+pub struct WavpackReader {
     context: NonNull<WavpackContext>,
 }
 
-/// Reading WavPack Files
-impl WavPackReader {
+impl WavpackReader {
     /// Opens a WavPack file at the given path for reading
     ///
-    /// See [`WavPackReaderBuilder`] for more advanced options.
-    pub fn builder(file_path: impl Into<PathBuf>) -> WavPackReaderBuilder {
-        WavPackReaderBuilder {
+    /// See [`WavpackReaderBuilder`] for more advanced options.
+    pub fn builder(file_path: impl Into<PathBuf>) -> WavpackReaderBuilder {
+        WavpackReaderBuilder {
             file_path: file_path.into(),
             flags: 0,
             norm_offset: None,
@@ -323,7 +322,7 @@ impl WavPackReader {
     }
 }
 
-impl Drop for WavPackReader {
+impl Drop for WavpackReader {
     fn drop(&mut self) {
         let wpc = self.context.as_ptr();
         unsafe { WavpackCloseFile(wpc) };

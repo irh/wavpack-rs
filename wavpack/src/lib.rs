@@ -6,6 +6,6 @@ mod version;
 mod writer;
 
 pub use error::{Error, Result};
-pub use reader::{TagData, WavPackReader, WavPackReaderBuilder};
+pub use reader::{TagData, WavpackReader, WavpackReaderBuilder};
 pub use version::{get_library_version, get_library_version_string};
-pub use writer::{WavPackWriter, WavPackWriterBuilder};
+pub use writer::{WavpackWriter, WavpackWriterBuilder};

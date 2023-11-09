@@ -122,10 +122,10 @@ impl TryInto<WavpackConfig> for BuilderConfig {
     }
 }
 
-/// A builder for [WavPackWriter]s
+/// A builder for [WavpackWriter]s
 ///
-/// Created with [WavPackWriter::new].
-pub struct WavPackWriterBuilder {
+/// Created with [WavpackWriter::new].
+pub struct WavpackWriterBuilder {
     wv_handle: Box<WriteHandle>,
     wvc_handle: Option<Box<WriteHandle>>,
     file_info: Option<FileInfomation>,
@@ -154,8 +154,8 @@ macro_rules! add_config_opt {
     };
 }
 
-impl WavPackWriterBuilder {
-    pub fn build(mut self) -> Result<WavPackWriter> {
+impl WavpackWriterBuilder {
+    pub fn build(mut self) -> Result<WavpackWriter> {
         let mut config = self.config.try_into()?;
 
         let wv_ptr = &mut *self.wv_handle as *mut WriteHandle as *mut c_void;
@@ -198,7 +198,7 @@ impl WavPackWriterBuilder {
             WavpackPackInit(context);
         }
 
-        Ok(WavPackWriter {
+        Ok(WavpackWriter {
             context: NonNull::new(context).unwrap(),
             _wv: self.wv_handle,
             _wvc: self.wvc_handle,
@@ -237,7 +237,7 @@ impl WavPackWriterBuilder {
 /// A writer for WavPack files
 ///
 /// See [WavPackWriterBuilder]
-pub struct WavPackWriter {
+pub struct WavpackWriter {
     context: NonNull<WavpackContext>,
     _wv: Box<WriteHandle>,
     _wvc: Option<Box<WriteHandle>>,
@@ -245,9 +245,9 @@ pub struct WavPackWriter {
     is_flushed: bool,
 }
 
-impl WavPackWriter {
-    pub fn builder(writeable: impl Write + 'static) -> WavPackWriterBuilder {
-        WavPackWriterBuilder {
+impl WavpackWriter {
+    pub fn builder(writeable: impl Write + 'static) -> WavpackWriterBuilder {
+        WavpackWriterBuilder {
             wv_handle: Box::new(WriteHandle::new(writeable)),
             wvc_handle: None,
             file_info: None,
@@ -307,7 +307,7 @@ impl WavPackWriter {
     }
 }
 
-impl Drop for WavPackWriter {
+impl Drop for WavpackWriter {
     fn drop(&mut self) {
         if !self.is_flushed {
             let _ = self.flush();
