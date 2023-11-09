@@ -28,6 +28,8 @@ pub enum Error {
     #[error("WavpacAddWrapper failed")]
     AddWrapperFailed,
     #[error(transparent)]
+    IoError(#[from] std::io::Error),
+    #[error(transparent)]
     NulError(#[from] std::ffi::NulError),
     #[error(transparent)]
     IntoStringError(#[from] std::ffi::IntoStringError),

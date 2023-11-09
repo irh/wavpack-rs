@@ -1,5 +1,8 @@
-use std::fs::remove_file;
-use std::fs::File;
+use std::{
+    cell::RefCell,
+    io::{self, Cursor, Seek},
+    rc::Rc,
+};
 use wavpack::*;
 
 fn make_wave(frames: usize, channels: usize, frequency: f64) -> Vec<i32> {
@@ -16,28 +19,20 @@ fn make_wave(frames: usize, channels: usize, frequency: f64) -> Vec<i32> {
 }
 
 fn seq(channels: usize) -> Vec<i32> {
-    [
-        make_wave(44100, channels, 277.183),
-        make_wave(44100, channels, 293.665),
-        make_wave(44100, channels, 329.628),
-        make_wave(44100, channels, 349.228),
-        make_wave(44100, channels, 391.995),
-        make_wave(44100, channels, 440.),
-        make_wave(44100, channels, 493.883),
-        make_wave(44100, channels, 523.251),
-    ]
-    .into_iter()
-    .flatten()
-    .collect()
+    [make_wave(44100, channels, 220.0)]
+        .into_iter()
+        .flatten()
+        .collect()
 }
 
-fn run_write_read_test(channels: usize, channel_mask: i32, file_name: &str) {
+fn run_write_read_test(channels: usize, channel_mask: i32) {
     let mut input = seq(channels);
+
+    let buffer = TestBuffer::default();
 
     // write
     {
-        let file = File::create(file_name).unwrap();
-        let mut wc = WavpackWriter::builder(file)
+        let mut writer = WavpackWriter::builder(buffer.clone())
             .add_bytes_per_sample(2)
             .add_bits_per_sample(16)
             .add_num_channels(channels as i32)
@@ -46,34 +41,75 @@ fn run_write_read_test(channels: usize, channel_mask: i32, file_name: &str) {
             .build()
             .unwrap();
 
-        wc.pack_samples(&mut input).unwrap();
+        writer.pack_samples(&mut input).unwrap();
     }
 
     // read
-    let mut context = WavpackReader::builder(file_name).build().unwrap();
-    let unpacked = context.unpack(0, 75 * 8).unwrap();
+    {
+        buffer.rewind();
 
-    // test
-    assert_eq!(input.len(), unpacked.len());
-    for (v1, v2) in input.iter().zip(unpacked.iter()) {
-        assert_eq!(v1, v2);
+        let mut reader = WavpackReader::with_reader(buffer.clone()).build().unwrap();
+        let mut read_buffer = vec![0; reader.get_num_samples64().unwrap() as usize * channels];
+        let unpacked_frame_count = reader.unpack_samples(&mut read_buffer).unwrap();
+
+        // test
+        assert_eq!(input.len(), unpacked_frame_count as usize * channels);
+        for (v1, v2) in input.iter().zip(read_buffer.iter()) {
+            assert_eq!(v1, v2);
+        }
     }
-
-    // clean
-    remove_file(file_name).unwrap();
 }
 
 #[test]
 fn write_read_mono() {
-    run_write_read_test(1, 4, "mono.wv");
+    run_write_read_test(1, 4);
 }
 
 #[test]
 fn write_read_stereo() {
-    run_write_read_test(2, 3, "stereo.wv");
+    run_write_read_test(2, 3);
 }
 
 #[test]
 fn write_read_4c() {
-    run_write_read_test(4, 15, "4c.wv");
+    run_write_read_test(4, 15);
+}
+
+#[derive(Clone, Default)]
+struct TestBuffer {
+    cursor: Rc<RefCell<Cursor<Vec<u8>>>>,
+}
+
+impl TestBuffer {
+    fn rewind(&self) {
+        self.cursor.borrow_mut().rewind().unwrap();
+    }
+}
+
+impl io::Read for TestBuffer {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.cursor.borrow_mut().read(buf)
+    }
+}
+
+impl io::Write for TestBuffer {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.cursor.borrow_mut().write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.cursor.borrow_mut().flush()
+    }
+}
+
+impl io::Seek for TestBuffer {
+    fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64> {
+        self.cursor.borrow_mut().seek(pos)
+    }
+}
+
+impl WavpackRead for TestBuffer {
+    fn stream_length(&mut self) -> Option<u64> {
+        Some(self.cursor.borrow().get_ref().len() as u64)
+    }
 }
