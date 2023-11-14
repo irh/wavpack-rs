@@ -118,7 +118,6 @@ pub struct WavpackWriterBuilder {
     wvc_handle: Option<Box<WriteHandle>>,
     file_info: Option<FileInfomation>,
     wrap_header: Option<Vec<u8>>,
-    total_samples: Option<i64>,
     config: BuilderConfig,
 }
 
@@ -149,7 +148,6 @@ impl WavpackWriterBuilder {
             wvc_handle: None,
             file_info: None,
             wrap_header: None,
-            total_samples: None,
             config: BuilderConfig::default(),
         }
     }
@@ -191,7 +189,7 @@ impl WavpackWriterBuilder {
             WavpackSetConfiguration64(
                 context,
                 config_ptr,
-                self.total_samples.unwrap_or(-1),
+                -1, // The total sample count is updated when the writer is closed
                 std::ptr::null(),
             );
             WavpackPackInit(context);
@@ -199,10 +197,11 @@ impl WavpackWriterBuilder {
 
         Ok(WavpackWriter {
             context: NonNull::new(context).unwrap(),
-            _wv: self.wv_handle,
+            wv_handle: self.wv_handle,
             _wvc: self.wvc_handle,
             config,
             is_flushed: true,
+            is_closed: false,
         })
     }
 
@@ -215,7 +214,6 @@ impl WavpackWriterBuilder {
 
     add_opt!(add_file_info, file_info, FileInfomation);
     add_opt!(add_wrapper, wrap_header, Vec<u8>);
-    add_opt!(set_total_samples, total_samples, i64);
     add_config_opt!(add_bitrate, bitrate, f32);
     add_config_opt!(add_shaping_weight, shaping_weight, f32);
     add_config_opt!(add_bits_per_sample, bits_per_sample, i32);
@@ -238,10 +236,11 @@ impl WavpackWriterBuilder {
 /// See [WavPackWriterBuilder]
 pub struct WavpackWriter {
     context: NonNull<WavpackContext>,
-    _wv: Box<WriteHandle>,
+    wv_handle: Box<WriteHandle>,
     _wvc: Option<Box<WriteHandle>>,
     config: WavpackConfig,
     is_flushed: bool,
+    is_closed: bool,
 }
 
 impl WavpackWriter {
@@ -261,7 +260,6 @@ impl WavpackWriter {
             wvc_handle: None,
             file_info: None,
             wrap_header: None,
-            total_samples: None,
             config: BuilderConfig::default(),
         }
     }
@@ -300,6 +298,35 @@ impl WavpackWriter {
         Ok(())
     }
 
+    pub fn close(&mut self) -> Result<()> {
+        if self.is_closed {
+            return Err(Error::AlreadyClosed);
+        }
+
+        if !self.is_flushed {
+            self.flush()?;
+        }
+
+        let wv = &mut self.wv_handle;
+        if !wv.first_block.is_empty() {
+            // It's the client's responsibility to ensure that WavpackUpdateNumSamples has been
+            // called, and that the updated first block is re-written back to the output.
+
+            unsafe {
+                WavpackUpdateNumSamples(
+                    self.context.as_ptr(),
+                    wv.first_block.as_mut_ptr() as *mut c_void,
+                )
+            }
+
+            wv.writeable.rewind()?;
+            wv.writeable.write_all(&wv.first_block)?;
+        }
+
+        self.is_closed = true;
+        Ok(())
+    }
+
     /// Store computed MD5 sum in WavPack metadata.
     ///
     /// Note that the user must compute the 16 byte sum; it is not done here.
@@ -318,8 +345,8 @@ impl WavpackWriter {
 
 impl Drop for WavpackWriter {
     fn drop(&mut self) {
-        if !self.is_flushed {
-            let _ = self.flush();
+        if !self.is_closed {
+            let _ = self.close();
         }
         let wpc = self.context.as_ptr();
         unsafe { WavpackCloseFile(wpc) };
@@ -331,6 +358,10 @@ pub trait WavpackWrite: Write + Seek {}
 struct WriteHandle {
     writeable: Box<dyn WavpackWrite>,
     error: Option<io::Error>,
+    // The first block needs to be updated and re-written when closing the file to ensure that the
+    // correct sample count is included in the file header. Updating and re-writing the first block
+    // is the caller's responsibility, so it gets cached here.
+    first_block: Vec<u8>,
 }
 
 impl WriteHandle {
@@ -338,6 +369,7 @@ impl WriteHandle {
         Self {
             writeable: Box::new(writeable),
             error: None,
+            first_block: Vec::new(),
         }
     }
 }
@@ -362,7 +394,13 @@ extern "C" fn write_block(write_handle: *mut c_void, data: *mut c_void, bcount: 
 
     let data = unsafe { std::slice::from_raw_parts_mut(data as *mut u8, bcount as usize) };
     match write_handle.writeable.write_all(data) {
-        Ok(_) => TRUE,
+        Ok(_) => {
+            if write_handle.first_block.is_empty() {
+                write_handle.first_block.extend(data.iter());
+            }
+
+            TRUE
+        }
         Err(x) => {
             write_handle.error = Some(x);
             FALSE
