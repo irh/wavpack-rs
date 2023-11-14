@@ -27,6 +27,8 @@ pub enum Error {
     StoreMD5SumFailed,
     #[error("WavpacAddWrapper failed")]
     AddWrapperFailed,
+    #[error("The file is already closed")]
+    AlreadyClosed,
     #[error(transparent)]
     IoError(#[from] std::io::Error),
     #[error(transparent)]

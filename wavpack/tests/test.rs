@@ -32,7 +32,7 @@ fn run_write_read_test(channels: usize, channel_mask: i32) {
 
     // write
     {
-        let mut writer = WavpackWriter::builder(buffer.clone())
+        let mut writer = WavpackWriter::with_writer(buffer.clone())
             .add_bytes_per_sample(2)
             .add_bits_per_sample(16)
             .add_num_channels(channels as i32)
@@ -113,3 +113,5 @@ impl WavpackRead for TestBuffer {
         Some(self.cursor.borrow().get_ref().len() as u64)
     }
 }
+
+impl WavpackWrite for TestBuffer {}

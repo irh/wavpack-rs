@@ -292,7 +292,7 @@ pub struct WavpackReader {
 impl WavpackReader {
     /// Opens a WavPack file at the given path for reading
     ///
-    /// See [`WavpackReaderBuilder`] for more advanced options.
+    /// See [`WavpackReader::with_reader`] for more advanced options.
     pub fn open(file_path: impl AsRef<Path>) -> Result<WavpackReaderBuilder> {
         let file_reader = BufReader::new(File::open(file_path.as_ref())?);
         Ok(WavpackReaderBuilder::new(Box::new(file_reader)))
