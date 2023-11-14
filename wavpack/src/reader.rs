@@ -1,24 +1,26 @@
 use crate::{Error, Result};
 use std::{
     collections::BTreeMap,
-    ffi::{c_char, CStr, CString},
+    ffi::{c_char, c_int, c_void, CStr, CString},
     fmt,
-    path::PathBuf,
+    fs::File,
+    io::{BufReader, Read, Seek, SeekFrom},
+    path::Path,
     ptr::NonNull,
+    slice,
 };
 use wavpack_sys::*;
 
-/// A builder for [WavPackReader]s
+/// A builder for [WavpackReader]s
 ///
 /// usage
 /// ```
-/// wavpack::WavPackReader::builder("/path/to/foo.wv")
-///     .tags()
-///     .edit_tags()
-///     .build();
+/// fn open_wavpack_file(path: &str) -> wavpack::WavpackReader {
+///     wavpack::WavpackReader::open(path).unwrap().build().unwrap()
+/// }
 /// ```
-pub struct WavPackReaderBuilder {
-    file_path: PathBuf,
+pub struct WavpackReaderBuilder {
+    stream_reader: Box<dyn WavpackRead>,
     flags: u32,
     norm_offset: Option<i32>,
 }
@@ -33,25 +35,41 @@ macro_rules! add_flag {
     };
 }
 
-impl WavPackReaderBuilder {
-    pub fn build(self) -> Result<WavPackReader> {
-        let file_name = CString::new(self.file_path.display().to_string())?;
-        let mut error = vec![0 as c_char; 81]; // 80 chars + NUL
-        let error_ptr = error.as_mut_ptr();
+impl WavpackReaderBuilder {
+    fn new(stream_reader: Box<dyn WavpackRead>) -> Self {
+        Self {
+            stream_reader,
+            flags: 0,
+            norm_offset: None,
+        }
+    }
+
+    pub fn build(self) -> Result<WavpackReader> {
+        let mut error_buffer = [0 as c_char; 81]; // 80 chars + NUL
+        let error_ptr = error_buffer.as_mut_ptr();
+
+        let mut stream_reader = Box::new(WavpackStreamReader::new(self.stream_reader));
+
         let context = unsafe {
-            WavpackOpenFileInput(
-                file_name.as_ptr(),
+            WavpackOpenFileInputEx64(
+                &mut (*stream_reader.function_table) as *mut WavpackStreamReader64,
+                &mut (*stream_reader) as *mut WavpackStreamReader as *mut c_void,
+                std::ptr::null::<c_void>() as *mut c_void, // Reading with a .wvc file is currently unsupported
                 error_ptr,
                 self.flags as i32,
                 self.norm_offset.unwrap_or(0),
             )
         };
+
         match NonNull::new(context) {
+            Some(context) => Ok(WavpackReader {
+                context,
+                _stream_reader: stream_reader,
+            }),
             None => {
                 let error = char_ptr_to_string(error_ptr)?;
                 Err(Error::Message(error))
             }
-            Some(context) => Ok(WavPackReader { context }),
         }
     }
 
@@ -73,6 +91,173 @@ impl WavPackReaderBuilder {
     add_flag!(tags, OPEN_TAGS);
     add_flag!(wrapper, OPEN_WRAPPER);
     add_flag!(wvc, OPEN_WVC);
+}
+
+/// The set of reading operations needed by [WavpackReader]
+pub trait WavpackRead: Read + Seek {
+    fn stream_length(&mut self) -> Option<u64>;
+}
+
+impl WavpackRead for BufReader<File> {
+    fn stream_length(&mut self) -> Option<u64> {
+        self.get_ref()
+            .metadata()
+            .ok()
+            .map(|metadata| metadata.len())
+    }
+}
+
+struct WavpackStreamReader {
+    reader: Option<Box<dyn WavpackRead>>,
+    function_table: Box<WavpackStreamReader64>,
+    // WavPack's `push_back_byte` function expects `ungetc`-like behaviour.
+    // As of 5.6.0, it's only used for a single byte of lookahead.
+    // This may change in the future, and this will need to be adapted.
+    pushed_back_byte: Option<u8>,
+}
+
+impl WavpackStreamReader {
+    fn new(reader: Box<dyn WavpackRead>) -> Self {
+        Self {
+            reader: Some(reader),
+            function_table: Box::new(Self::create_function_table()),
+            pushed_back_byte: None,
+        }
+    }
+
+    fn create_function_table() -> WavpackStreamReader64 {
+        WavpackStreamReader64 {
+            read_bytes: Some(Self::read_bytes),
+            get_pos: Some(Self::get_pos),
+            set_pos_abs: Some(Self::set_pos_abs),
+            set_pos_rel: Some(Self::set_pos_rel),
+            push_back_byte: Some(Self::push_back_byte),
+            get_length: Some(Self::get_length),
+            can_seek: Some(Self::can_seek),
+            close: Some(Self::close),
+
+            // Operations needed for reader tag editing, which is currently unsupported
+            truncate_here: None,
+            write_bytes: None,
+        }
+    }
+
+    fn from_ptr<'a>(ptr: *mut c_void) -> &'a mut Self {
+        assert!(!ptr.is_null());
+        unsafe { &mut *(ptr as *mut WavpackStreamReader) }
+    }
+
+    extern "C" fn read_bytes(instance_ptr: *mut c_void, data: *mut c_void, count: i32) -> i32 {
+        let instance = Self::from_ptr(instance_ptr);
+        let Some(reader) = &mut instance.reader else {
+            return -1;
+        };
+
+        assert!(count >= 0);
+        if count == 0 {
+            return 0;
+        }
+        let count = count as usize;
+
+        let buffer = unsafe { slice::from_raw_parts_mut(data as *mut u8, count) };
+
+        let mut bytes_read = match instance.pushed_back_byte.take() {
+            Some(byte) => {
+                buffer[0] = byte;
+                1
+            }
+            None => 0,
+        };
+
+        while bytes_read < count {
+            match reader.read(&mut buffer[bytes_read..]) {
+                Ok(count) => {
+                    if count == 0 {
+                        return bytes_read as i32;
+                    }
+                    bytes_read += count;
+                }
+                Err(_) => {
+                    return -1;
+                }
+            }
+        }
+
+        bytes_read as i32
+    }
+
+    extern "C" fn get_pos(instance_ptr: *mut c_void) -> i64 {
+        Self::from_ptr(instance_ptr)
+            .reader
+            .as_mut()
+            .and_then(|reader| reader.as_mut().stream_position().ok())
+            .and_then(|position| i64::try_from(position).ok())
+            .unwrap_or(-1)
+    }
+
+    extern "C" fn get_length(instance_ptr: *mut c_void) -> i64 {
+        Self::from_ptr(instance_ptr)
+            .reader
+            .as_mut()
+            .and_then(|reader| reader.stream_length())
+            .and_then(|position| i64::try_from(position).ok())
+            .unwrap_or(-1)
+    }
+
+    extern "C" fn set_pos_abs(instance_ptr: *mut c_void, pos: i64) -> c_int {
+        match Self::from_ptr(instance_ptr)
+            .reader
+            .as_mut()
+            .and_then(|reader| reader.seek(SeekFrom::Start(pos as u64)).ok())
+        {
+            Some(_) => 0,
+            None => -1,
+        }
+    }
+
+    extern "C" fn set_pos_rel(instance_ptr: *mut c_void, delta: i64, mode: c_int) -> c_int {
+        let seek_mode = match mode {
+            // SEEK_SET
+            0 => SeekFrom::Start(delta as u64),
+            // SEEK_CUR
+            1 => SeekFrom::Current(delta),
+            // SEEK_END
+            2 => SeekFrom::End(delta),
+            _ => return -1,
+        };
+
+        match Self::from_ptr(instance_ptr)
+            .reader
+            .as_mut()
+            .and_then(|reader| reader.seek(seek_mode).ok())
+        {
+            Some(_) => 0,
+            None => -1,
+        }
+    }
+
+    extern "C" fn push_back_byte(instance_ptr: *mut c_void, c: c_int) -> c_int {
+        let instance = Self::from_ptr(instance_ptr);
+
+        if instance.pushed_back_byte.is_some() {
+            // As of writing, WavPack only performs single-byte lookahead.
+            // If this is no longer the case then a buffer will be needed instead of a single byte.
+            debug_assert!(false);
+            -1
+        } else {
+            instance.pushed_back_byte = Some(c as u8);
+            c
+        }
+    }
+
+    extern "C" fn can_seek(_instance_ptr: *mut c_void) -> c_int {
+        1
+    }
+
+    extern "C" fn close(instance_ptr: *mut c_void) -> c_int {
+        Self::from_ptr(instance_ptr).reader.take();
+        1
+    }
 }
 
 macro_rules! add_wavpack_fn {
@@ -99,21 +284,23 @@ macro_rules! wavpack_fn_private {
 }
 
 /// A WavPack file reader
-pub struct WavPackReader {
+pub struct WavpackReader {
     context: NonNull<WavpackContext>,
+    _stream_reader: Box<WavpackStreamReader>,
 }
 
-/// Reading WavPack Files
-impl WavPackReader {
+impl WavpackReader {
     /// Opens a WavPack file at the given path for reading
     ///
-    /// See [`WavPackReaderBuilder`] for more advanced options.
-    pub fn builder(file_path: impl Into<PathBuf>) -> WavPackReaderBuilder {
-        WavPackReaderBuilder {
-            file_path: file_path.into(),
-            flags: 0,
-            norm_offset: None,
-        }
+    /// See [`WavpackReaderBuilder`] for more advanced options.
+    pub fn open(file_path: impl AsRef<Path>) -> Result<WavpackReaderBuilder> {
+        let file_reader = BufReader::new(File::open(file_path.as_ref())?);
+        Ok(WavpackReaderBuilder::new(Box::new(file_reader)))
+    }
+
+    /// Prepares a WavPack reader that uses the provided stream reader for reading operations
+    pub fn with_reader(stream_reader: impl WavpackRead + 'static) -> WavpackReaderBuilder {
+        WavpackReaderBuilder::new(Box::new(stream_reader))
     }
 
     // TODO: WavpackOpenFileInputEx, WavpackOpenFileInputEx64
@@ -323,7 +510,7 @@ impl WavPackReader {
     }
 }
 
-impl Drop for WavPackReader {
+impl Drop for WavpackReader {
     fn drop(&mut self) {
         let wpc = self.context.as_ptr();
         unsafe { WavpackCloseFile(wpc) };
