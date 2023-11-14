@@ -248,7 +248,7 @@ impl WavpackWriter {
     ///
     /// See [`WavpackWriter::with_writer`] for more advanced options.
     pub fn open(file_path: impl AsRef<Path>) -> Result<WavpackWriterBuilder> {
-        let file_writer = BufWriter::new(File::open(file_path.as_ref())?);
+        let file_writer = BufWriter::new(File::create(file_path.as_ref())?);
         let write_handle = Box::new(WriteHandle::new(file_writer));
         Ok(WavpackWriterBuilder::new(write_handle))
     }
