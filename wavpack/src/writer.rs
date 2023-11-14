@@ -1,27 +1,15 @@
 use crate::{Error, Result};
 use std::{
     ffi::{c_char, c_int, c_void},
-    io::Write,
+    fs::File,
+    io::{self, BufWriter, Seek, Write},
+    path::Path,
     ptr::NonNull,
 };
 use wavpack_sys::*;
 
 const FALSE: c_int = 0;
 const TRUE: c_int = 1;
-
-struct WriteHandle {
-    writeable: Box<dyn Write>,
-    error: Option<std::io::Error>,
-}
-
-impl WriteHandle {
-    fn new(writeable: impl Write + 'static) -> Self {
-        Self {
-            writeable: Box::new(writeable),
-            error: None,
-        }
-    }
-}
 
 /// File format
 #[derive(Clone, Copy, Debug)]
@@ -155,6 +143,17 @@ macro_rules! add_config_opt {
 }
 
 impl WavpackWriterBuilder {
+    fn new(writer: Box<WriteHandle>) -> Self {
+        WavpackWriterBuilder {
+            wv_handle: writer,
+            wvc_handle: None,
+            file_info: None,
+            wrap_header: None,
+            total_samples: None,
+            config: BuilderConfig::default(),
+        }
+    }
+
     pub fn build(mut self) -> Result<WavpackWriter> {
         let mut config = self.config.try_into()?;
 
@@ -209,7 +208,7 @@ impl WavpackWriterBuilder {
 
     /// Adds an optional .wvc correction output to the writer
     #[must_use]
-    pub fn add_wvc(mut self, writeable: impl Write + 'static) -> Self {
+    pub fn add_wvc(mut self, writeable: impl WavpackWrite + 'static) -> Self {
         self.wvc_handle = Some(Box::new(WriteHandle::new(writeable)));
         self
     }
@@ -246,9 +245,19 @@ pub struct WavpackWriter {
 }
 
 impl WavpackWriter {
-    pub fn builder(writeable: impl Write + 'static) -> WavpackWriterBuilder {
+    /// Opens a WavPack file at the given path for writing
+    ///
+    /// See [`WavpackWriter::with_writer`] for more advanced options.
+    pub fn open(file_path: impl AsRef<Path>) -> Result<WavpackWriterBuilder> {
+        let file_writer = BufWriter::new(File::open(file_path.as_ref())?);
+        let write_handle = Box::new(WriteHandle::new(file_writer));
+        Ok(WavpackWriterBuilder::new(write_handle))
+    }
+
+    /// Prepares a WavPack writer that uses the provided [`WavpackWrite`] implementation
+    pub fn with_writer(writer: impl WavpackWrite + 'static) -> WavpackWriterBuilder {
         WavpackWriterBuilder {
-            wv_handle: Box::new(WriteHandle::new(writeable)),
+            wv_handle: Box::new(WriteHandle::new(writer)),
             wvc_handle: None,
             file_info: None,
             wrap_header: None,
@@ -316,6 +325,24 @@ impl Drop for WavpackWriter {
         unsafe { WavpackCloseFile(wpc) };
     }
 }
+
+pub trait WavpackWrite: Write + Seek {}
+
+struct WriteHandle {
+    writeable: Box<dyn WavpackWrite>,
+    error: Option<io::Error>,
+}
+
+impl WriteHandle {
+    fn new(writeable: impl WavpackWrite + 'static) -> Self {
+        Self {
+            writeable: Box::new(writeable),
+            error: None,
+        }
+    }
+}
+
+impl WavpackWrite for BufWriter<File> {}
 
 // Writes the WavPack block to the WavPackWriter's writeable
 extern "C" fn write_block(write_handle: *mut c_void, data: *mut c_void, bcount: i32) -> c_int {
