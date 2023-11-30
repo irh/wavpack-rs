@@ -1,6 +1,6 @@
 [package]
 name = "wavpack"
-version = "0.4.0-alpha"
+version = "0.4.0"
 edition = "2021"
 authors = ["Ian Hobson <ian.r.hobson@gmail.com>", "Toru3 <ryuutet@gmail.com>"]
 description = "API bindings for WavPack"
@@ -13,7 +13,7 @@ categories = ["api-bindings", "multimedia::audio", "multimedia::encoding"]
 
 [dependencies]
 thiserror = "1.0.29"
-wavpack-sys = { version = "0.1.4", path = "../wavpack-sys" }
+wavpack-sys = { version = "0.4.0", path = "../wavpack-sys" }
 
 [dev-dependencies]
 anyhow = "1.0.43"
