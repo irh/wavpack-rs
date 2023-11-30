@@ -49,7 +49,7 @@ fn run_write_read_test(channels: usize, channel_mask: i32) {
         buffer.rewind();
 
         let mut reader = WavpackReader::with_reader(buffer.clone()).build().unwrap();
-        let mut read_buffer = vec![0; reader.get_num_samples64().unwrap() as usize * channels];
+        let mut read_buffer = vec![0; reader.get_num_samples().unwrap() as usize * channels];
         let unpacked_frame_count = reader.unpack_samples(&mut read_buffer).unwrap();
 
         // test

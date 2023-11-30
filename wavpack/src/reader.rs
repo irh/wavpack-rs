@@ -15,8 +15,10 @@ use wavpack_sys::*;
 ///
 /// usage
 /// ```
-/// fn open_wavpack_file(path: &str) -> wavpack::WavpackReader {
-///     wavpack::WavpackReader::open(path).unwrap().build().unwrap()
+/// use wavpack::{Result, WavpackReader};
+///
+/// fn open_wavpack_file(path: &str) -> Result<WavpackReader> {
+///     WavpackReader::open(path)?.build()
 /// }
 /// ```
 pub struct WavpackReaderBuilder {
@@ -284,6 +286,9 @@ macro_rules! wavpack_fn_private {
 }
 
 /// A WavPack file reader
+///
+/// For information about the various API functions, see the
+/// [WavPack API documentation](https://www.wavpack.com/WavPack5LibraryDoc.pdf).
 pub struct WavpackReader {
     context: NonNull<WavpackContext>,
     _stream_reader: Box<WavpackStreamReader>,
@@ -303,31 +308,40 @@ impl WavpackReader {
         WavpackReaderBuilder::new(Box::new(stream_reader))
     }
 
-    // TODO: WavpackOpenFileInputEx, WavpackOpenFileInputEx64
+    /// Unpack the specified number of samples from the current file position.
+    ///
+    /// Requires: `buffer.len() <= u32::MAX`
+    pub fn unpack_samples(&mut self, buffer: &mut [i32]) -> Result<u32> {
+        let len = buffer.len() / self.get_num_channels()? as usize;
+        if usize::BITS >= u32::BITS && len > u32::MAX as usize {
+            return Err(Error::IllegalArgument("buffer"));
+        }
+        let ptr = buffer.as_mut_ptr();
+        let len = len as u32;
+        let wpc = self.context.as_ptr();
+        let r = unsafe { WavpackUnpackSamples(wpc, ptr, len) };
+        self.get_error_message()?;
+        Ok(r)
+    }
+
     wavpack_fn!(get_mode, WavpackGetMode, i32);
     wavpack_fn!(get_num_channels, WavpackGetNumChannels, i32);
     wavpack_fn!(get_reduced_channels, WavpackGetReducedChannels, i32);
     wavpack_fn!(get_channel_mask, WavpackGetChannelMask, i32);
-    //wavpack_fn!(
-    //    get_channel_layout,
-    //    WavpackGetChannelLayout,
-    //    u32,
-    //    reorder,
-    //    *mut u8
-    //);
-    //wavpack_fn!(
-    //    get_channel_identities,
-    //    WavpackGetChannelIdentities,
-    //    (),
-    //    identities,
-    //    *mut u8
-    //);
     wavpack_fn!(get_sample_rate, WavpackGetSampleRate, u32);
     wavpack_fn!(get_native_sample_rate, WavpackGetNativeSampleRate, u32);
     wavpack_fn!(get_bits_per_sample, WavpackGetBitsPerSample, i32);
     wavpack_fn!(get_bytes_per_sample, WavpackGetBytesPerSample, i32);
     wavpack_fn!(get_version, WavpackGetVersion, i32);
     wavpack_fn!(get_file_format, WavpackGetFileFormat, u8);
+
+    wavpack_fn!(seek_sample, WavpackSeekSample64, i32, sample, i64);
+    wavpack_fn!(get_sample_index, WavpackGetSampleIndex64, i64);
+    wavpack_fn!(get_instant_bitrate, WavpackGetInstantBitrate, f64);
+    wavpack_fn!(get_num_errors, WavpackGetNumErrors, i32);
+    wavpack_fn!(get_lossy_blocks, WavpackLossyBlocks, i32);
+    wavpack_fn!(get_progress, WavpackGetProgress, f64);
+
     pub fn get_file_extension(&mut self) -> Result<String> {
         let wpc = self.context.as_ptr();
         let r = unsafe { WavpackGetFileExtension(wpc) };
@@ -335,11 +349,10 @@ impl WavpackReader {
         let r = char_ptr_to_string(r)?;
         Ok(r)
     }
+
     wavpack_fn!(get_qualify_mode, WavpackGetQualifyMode, i32);
-    wavpack_fn!(get_num_samples, WavpackGetNumSamples, u32);
-    wavpack_fn!(get_num_samples64, WavpackGetNumSamples64, i64);
-    wavpack_fn!(get_file_size, WavpackGetFileSize, u32);
-    wavpack_fn!(get_file_size64, WavpackGetFileSize64, i64);
+    wavpack_fn!(get_num_samples, WavpackGetNumSamples64, i64);
+    wavpack_fn!(get_file_size, WavpackGetFileSize64, i64);
     wavpack_fn!(get_ratio, WavpackGetRatio, f64);
     wavpack_fn!(
         get_average_bitrate,
@@ -357,57 +370,27 @@ impl WavpackReader {
         Ok(r)
     }
 
+    // TODO Missing functions
+
+    //wavpack_fn!(
+    //    get_channel_layout,
+    //    WavpackGetChannelLayout,
+    //    u32,
+    //    reorder,
+    //    *mut u8
+    //);
+    //wavpack_fn!(
+    //    get_channel_identities,
+    //    WavpackGetChannelIdentities,
+    //    (),
+    //    identities,
+    //    *mut u8
+    //);
+
     //wavpack_fn!(get_wrapper_bytes, WavpackGetWrapperBytes, u32);
     //wavpack_fn!(get_wrapper_data, WavpackGetWrapperData, *mut u8);
     //wavpack_fn!(free_wrapper, WavpackFreeWrapper, ());
     //wavpack_fn!(seek_trailing_wrapper, WavpackSeekTrailingWrapper, ());
-
-    /// Unpack the specified number of samples from the current file position.
-    ///
-    /// Requires: `buffer.len() <= u32::MAX`
-    pub fn unpack_samples(&mut self, buffer: &mut [i32]) -> Result<u32> {
-        let len = buffer.len() / self.get_num_channels()? as usize;
-        if usize::BITS >= u32::BITS && len > u32::MAX as usize {
-            return Err(Error::IllegalArgument("buffer"));
-        }
-        let ptr = buffer.as_mut_ptr();
-        let len = len as u32;
-        let wpc = self.context.as_ptr();
-        let r = unsafe { WavpackUnpackSamples(wpc, ptr, len) };
-        self.get_error_message()?;
-        Ok(r)
-    }
-
-    wavpack_fn!(seek_sample64, WavpackSeekSample64, i32, sample, i64);
-    wavpack_fn!(seek_sample, WavpackSeekSample, i32, sample, u32);
-    wavpack_fn!(get_sample_index64, WavpackGetSampleIndex64, i64);
-    wavpack_fn!(get_sample_index, WavpackGetSampleIndex, u32);
-    wavpack_fn!(get_instant_bitrate, WavpackGetInstantBitrate, f64);
-    wavpack_fn!(get_num_errors, WavpackGetNumErrors, i32);
-    wavpack_fn!(get_lossy_blocks, WavpackLossyBlocks, i32);
-    wavpack_fn!(get_progress, WavpackGetProgress, f64);
-
-    /// unpack from `start` (frame) to `start+length` (frame)
-    ///
-    /// [frames per second = 75](https://en.wikipedia.org/wiki/Compact_Disc_Digital_Audio#Frames_and_timecode_frames)
-    pub fn unpack(&mut self, start: i64, length: i64) -> Result<Vec<i32>> {
-        const FRAME_PER_SECOND: i64 = 75;
-        let channels = self.get_num_channels()? as i64;
-        let sample_rate_par_frame = self.get_sample_rate()? as i64 / FRAME_PER_SECOND;
-        let sample_start = sample_rate_par_frame * start;
-        let sample_length = {
-            let l = channels * sample_rate_par_frame * length;
-            if l > u32::MAX as i64 {
-                return Err(Error::LengthTooLong);
-            } else {
-                l as usize
-            }
-        };
-        self.seek_sample64(sample_start)?;
-        let mut buf = vec![0; sample_length];
-        self.unpack_samples(&mut buf)?;
-        Ok(buf)
-    }
 
     /// Get text tags
     pub fn get_text_tag_items(&mut self) -> Result<Vec<(String, String)>> {
