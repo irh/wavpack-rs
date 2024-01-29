@@ -472,7 +472,7 @@ impl WavpackReader {
             Ok(r)
         };
         let mut v = check_and_get_binary(func)?;
-        let v_ptr = v.as_mut_ptr() as *mut i8;
+        let v_ptr = v.as_mut_ptr() as *mut c_char;
         let name = char_ptr_to_cstring(v_ptr)?;
         let name_len = name.to_bytes_with_nul().len();
         Ok((name, v[name_len..].to_vec()))
@@ -549,7 +549,7 @@ where
     let nullptr = std::ptr::null::<c_char>() as *mut c_char;
     let len = func(nullptr, 0)?;
     let mut buf = vec![0u8; len as usize];
-    let buf_ptr = buf.as_mut_ptr() as *mut i8;
+    let buf_ptr = buf.as_mut_ptr() as *mut c_char;
     let n_len = func(buf_ptr, len)?;
     assert_eq!(len, n_len);
     Ok(buf)
